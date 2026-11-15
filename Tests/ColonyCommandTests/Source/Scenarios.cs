@@ -41,6 +41,7 @@ namespace ColonyCommandTests
             ("Live refresh", LiveRefresh),
             ("Live refresh across views", LiveRefreshAcrossViews),
             ("No save data - Prepare removal", NoSaveDataPrepareRemoval),
+            ("Large colony", LargeColony),
         };
 
         /// <summary>

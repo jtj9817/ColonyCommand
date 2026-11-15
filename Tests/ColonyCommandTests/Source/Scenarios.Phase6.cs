@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using ColonyCommand;
@@ -62,6 +63,66 @@ namespace ColonyCommandTests
                     File.WriteAllLines(Path.Combine(AutoTest.Dir, "removal-expected.txt"), ids);
                     r.Notes.Add($"expected after removal: {ids.Length} things ({string.Join(", ", ids)})");
                 })
+                .Start();
+        }
+
+        // Precondition: 40 free colonists on the map (the rest are fixtures named Probe/Fixture), paused, no criteria. Trigger: a view
+        // with a name query and a mood sort is rebuilt 200 times (the query alternates, so every call is a rebuild), then the
+        // steady-state apply that runs on every frame and OnGUI event is called 2000 times. Failure modes: a rebuild that costs
+        // milliseconds or grows faster than the roster (it runs four times a second while a view is active), a steady-state apply that
+        // is not cheap (it runs from LateUpdate, WindowUpdate and every ExtraOnGUI event), a view that loses colonists at that size.
+        private const int LargeColonists = 40;
+        private const double RebuildBudgetMs = 2.0, SteadyBudgetUs = 50.0;
+
+        private static void LargeColony()
+        {
+            var s = new Scenario("Large colony", 2000000);
+            Roster r = Prelude(s, LargeColonists);
+            int fixtures = 0;
+            s.Do("a view of the fixtures sorted by mood", () =>
+                {
+                    fixtures = r.Vanilla.Count(e => e.pawn != null && Oracle.Name(e.pawn, SeamQuery));
+                    BarProbe.Start();
+                    ViewState.Query = SeamQuery;
+                    ViewState.Sort = SortKey.Mood;
+                    ViewState.Descending = true;
+                })
+                .ExpectWithin("the view is in place and shows every fixture", 20, () =>
+                {
+                    if (!BarAdapter.Applied || BarAdapter.AppliedVersion != ViewState.Version || BarProbe.IsDirty(Bar))
+                    {
+                        r.Last = "the view is not in place yet";
+                        return false;
+                    }
+                    r.Last = $"{BarAdapter.Shown} shown, expected {fixtures}";
+                    return BarAdapter.Shown == fixtures;
+                }, () => r.Last)
+                .Do("200 forced rebuilds and 2000 steady-state applies are cheap", () =>
+                {
+                    BarAdapter.Apply();
+                    RefreshProbe.Start();
+                    var clock = Stopwatch.StartNew();
+                    for (int i = 0; i < 200; i++)
+                    {
+                        ViewState.Query = i % 2 == 0 ? "Fixtur" : SeamQuery;   // a different request every time: a rebuild each call
+                        BarAdapter.Apply();
+                    }
+                    double rebuildMs = clock.Elapsed.TotalMilliseconds / 200;
+                    if (RefreshProbe.Build < 200)
+                        throw new InvalidOperationException($"only {RefreshProbe.Build} rebuilds happened in 200 requests: the timing below would measure nothing");
+                    ViewState.Query = SeamQuery;
+                    BarAdapter.Apply();
+                    clock.Restart();
+                    for (int i = 0; i < 2000; i++)
+                        BarAdapter.Apply();
+                    double steadyUs = clock.Elapsed.TotalMilliseconds * 1000 / 2000;
+                    r.Notes.Add($"{LargeColonists} colonists ({fixtures} fixtures): a rebuild {rebuildMs:F2} ms (budget {RebuildBudgetMs:F1}), a steady-state apply {steadyUs:F1} us (budget {SteadyBudgetUs:F0})");
+                    if (rebuildMs > RebuildBudgetMs)
+                        throw new InvalidOperationException($"a rebuild costs {rebuildMs:F2} ms with {LargeColonists} colonists, budget {RebuildBudgetMs:F1} ms");
+                    if (steadyUs > SteadyBudgetUs)
+                        throw new InvalidOperationException($"a steady-state apply costs {steadyUs:F1} us, budget {SteadyBudgetUs:F0} us");
+                })
+                .ExpectWithin("the view is still in place afterwards", 20, () => BarAdapter.Applied && BarAdapter.AppliedVersion == ViewState.Version && BarAdapter.Shown == fixtures)
                 .Start();
         }
     }
