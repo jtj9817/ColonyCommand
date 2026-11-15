@@ -25,8 +25,10 @@ filter/sort is active; skill presets Any/0/5/10/15; packageId `josh9817.colonyco
 - [x] Resolve Q1–Q4
 - [x] Decompiled source in `.tools/decomp/` (copied from social-graphs-mod-rw, 1.6.4871 rev598 = installed game;
       the modding center has none — `.tools/` is git-ignored there)
-- [ ] Mod skeleton: `About/About.xml` (1.6, no dependencies), `Source/ColonyCommand/ColonyCommand.csproj`
+- [x] Mod skeleton: `About/About.xml` (1.6, no dependencies), `Source/ColonyCommand/ColonyCommand.csproj`
       (`net472`, `Krafs.Rimworld.Ref 1.6.4871`, no Harmony reference), empty `Mod` class; `tools/build.sh` passes
+      (build + lint clean; the DLL's assembly references are `mscorlib` and `Assembly-CSharp` only, read with
+      `System.Reflection.Metadata`)
 - [ ] Test-only mod skeleton `Tests/ColonyCommandTests/` (adapted `AutoTest.cs`; About.xml declares Harmony as a
       dependency so it loads even if unused) wired through
       `MOD_EXTRA_MODS`; check how `autotest.py`/`build.sh` must build it (tooling change → port rule)

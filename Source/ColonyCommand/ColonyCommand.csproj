@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>ColonyCommand</RootNamespace>
+    <AssemblyName>ColonyCommand</AssemblyName>
+    <Version>0.1.0</Version>
+    <Authors>jtj9817</Authors>
+    <Description>Search, filter and sort the vanilla colonist bar (RimWorld 1.6, Core only).</Description>
+    <DebugType>embedded</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- tools/build.sh passes SourceRevisionId; don't let the SDK query git (root-owned mount). -->
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+    <!-- Output stays in bin/; tools/build.sh installs it into 1.6/Assemblies with an atomic rename. -->
+    <OutputPath>bin/</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference-only game assemblies (Copy Local off): matches game 1.6.4871. -->
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.4871" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- Deliberately NO Harmony reference: the shipped assembly is Core-only (user decision Q2). -->
+  </ItemGroup>
+
+</Project>
