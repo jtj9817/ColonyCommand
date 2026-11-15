@@ -2,18 +2,22 @@
 <LanguageData>
 
   <!-- Search (spec section 2) -->
-  <ColonyCommand_SearchPlaceholder>Search colonist by name</ColonyCommand_SearchPlaceholder>
+  <!-- The placeholder is short because the field in the right column is 186 px wide; the spec's wording is its tooltip. -->
+  <ColonyCommand_SearchPlaceholder>Search by name</ColonyCommand_SearchPlaceholder>
+  <ColonyCommand_SearchTip>Search colonist by name</ColonyCommand_SearchTip>
 
   <!-- Status chips (spec section 3.2). {0} is the live count. -->
   <ColonyCommand_ChipAll>All</ColonyCommand_ChipAll>
   <ColonyCommand_ChipDrafted>Drafted</ColonyCommand_ChipDrafted>
   <ColonyCommand_ChipInjured>Injured</ColonyCommand_ChipInjured>
   <ColonyCommand_ChipIdle>Idle</ColonyCommand_ChipIdle>
+  <ColonyCommand_ChipInspired>Inspired</ColonyCommand_ChipInspired>
   <ColonyCommand_ChipWithCount>{0} {1}</ColonyCommand_ChipWithCount>
   <ColonyCommand_ChipAllTip>Every colonist matching the search. Clears the status and skill filters.</ColonyCommand_ChipAllTip>
   <ColonyCommand_ChipDraftedTip>Colonists that are drafted right now. Click again to turn the filter off.</ColonyCommand_ChipDraftedTip>
   <ColonyCommand_ChipInjuredTip>Colonists with a current injury that can heal. Scars do not count. Click again to turn the filter off.</ColonyCommand_ChipInjuredTip>
   <ColonyCommand_ChipIdleTip>Colonists the colonist bar shows the idle icon for. Click again to turn the filter off.</ColonyCommand_ChipIdleTip>
+  <ColonyCommand_ChipInspiredTip>Colonists who are inspired right now (the colonist bar shows the inspiration icon for them). Click again to turn the filter off.</ColonyCommand_ChipInspiredTip>
 
   <!-- Empty state (FR-04) -->
   <ColonyCommand_NoMatches>No matching colonists</ColonyCommand_NoMatches>
@@ -47,7 +51,8 @@
   <ColonyCommand_DirLow>Low-high</ColonyCommand_DirLow>
   <ColonyCommand_DirTip>Reverse the sort direction. Colonists without a value (no mood, no usable skill) are always last.</ColonyCommand_DirTip>
 
-  <!-- Compact layout: the chips fold into one menu when there is no room for them -->
+  <!-- Compact layout: when the right column has no room for the whole panel, the chips, Skill, Sort and Reset fold into one menu -->
   <ColonyCommand_Filters>Filters...</ColonyCommand_Filters>
+  <ColonyCommand_FiltersTip>Status, skill and sorting filters. Highlighted while any of them is set.</ColonyCommand_FiltersTip>
 
 </LanguageData>

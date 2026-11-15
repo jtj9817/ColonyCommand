@@ -59,6 +59,21 @@ namespace ColonyCommandTests
                 pawn.health.RemoveHediff(injury);
         }
 
+        /// <summary>
+        /// Starts an inspiration through the game's own handler (no letter), trying each def until one can occur for this pawn
+        /// (the defs have requirements: skills, work types). Throws when none can, so a fixture is never silently not inspired.
+        /// </summary>
+        public static InspirationDef Inspire(Pawn pawn)
+        {
+            InspirationHandler handler = pawn.mindState.inspirationHandler;
+            foreach (InspirationDef def in DefDatabase<InspirationDef>.AllDefsListForReading)
+            {
+                if (handler.TryStartInspiration(def, null, sendLetter: false))
+                    return def;
+            }
+            throw new InvalidOperationException($"no inspiration can start for {pawn.LabelShort}");
+        }
+
         public static void Draft(Pawn pawn) => pawn.drafter.Drafted = true;
 
         public static void Undraft(Pawn pawn) => pawn.drafter.Drafted = false;

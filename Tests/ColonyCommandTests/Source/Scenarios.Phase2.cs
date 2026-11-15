@@ -117,6 +117,7 @@ namespace ColonyCommandTests
             Fixtures.Injure(c.F);
             Fixtures.Draft(c.F);
             c.E.Name = new NameSingle("BZfxsolo");   // nothing generates a pawn from here on
+            int lettersBefore = Find.LetterStack.LettersListForReading.Count;
             c.F.Kill(null);
             if (c.F.Corpse == null)
                 throw new InvalidOperationException("F left no corpse");
@@ -124,6 +125,11 @@ namespace ColonyCommandTests
             // The death put a message on screen. Vanilla draws messages as windows, and the bar ignores the mouse under one
             // (Mouse.IsOver is false beneath a window): a message over a portrait swallows a real click or drag.
             Messages.Clear();
+            // And a "Death" letter at the right edge, where the controls' panel lives: letters stack up from the weather block, the
+            // alerts on top of them, and every cast scenario of a run would add one more until the panel has no room left.
+            List<Letter> letters = Find.LetterStack.LettersListForReading;
+            for (int i = letters.Count - 1; i >= lettersBefore; i--)
+                Find.LetterStack.RemoveLetter(letters[i]);
             c.Skill = Fixtures.CommonSkill(c.Living);
             if (c.Skill == null)
                 throw new InvalidOperationException("no skill is usable by all five living cast members");

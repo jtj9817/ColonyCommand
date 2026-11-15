@@ -30,7 +30,7 @@ namespace ColonyCommandTests
                     InputProbe.Clear();
                     string a = args();
                     Placement p = TheWindow().CurrentPlacement;
-                    CCT.Info($"input '{label}': xdotool {a}; scale {BarProbe.CachedScale(Bar):F2}, {BarProbe.CachedEntries(Bar).Count} entries, dirty {BarProbe.IsDirty(Bar)}; strip {p.Strip}, search {p.Search}, icon {p.SearchIcon}, chip1 {TheWindow().ChipRect(1)}");
+                    CCT.Info($"input '{label}': xdotool {a}; scale {BarProbe.CachedScale(Bar):F2}, {BarProbe.CachedEntries(Bar).Count} entries, dirty {BarProbe.IsDirty(Bar)}; panel {p.Panel} (compact {p.Compact}), search {p.Search}, chip1 {TheWindow().ChipRect(1)}");
                     process = Xdo.Start(a);
                 })
                 .ExpectWithin($"{label}: xdotool finished", 20, () => process.HasExited)
@@ -45,8 +45,7 @@ namespace ColonyCommandTests
             InputStep(s, label, () => ClickArgs(where()));
 
         /// <summary>
-        /// A real click on the search field, or on its icon when the layout is compact (the field opens and takes the focus),
-        /// repeated until the field holds the keyboard focus. The retry is an observed property of the harness: now and then
+        /// A real click on the search field, repeated until the field holds the keyboard focus. The retry is an observed property of the harness: now and then
         /// the first click of a run reaches the game's OnGUI root but never the window stack (no exception, not reproducible
         /// by hand); the attempts needed are written to the run summary so the rate stays visible.
         /// </summary>
@@ -55,7 +54,7 @@ namespace ColonyCommandTests
             System.Diagnostics.Process process = null;
             int attempts = 0;
             float sentAt = 0f;
-            s.Expect("click the search field (its icon in the compact layout) until it holds the keyboard focus", () =>
+            s.Expect("click the search field until it holds the keyboard focus", () =>
                 {
                     ColonyCommandWindow w = TheWindow();
                     if (w.SearchFocused)
@@ -77,12 +76,58 @@ namespace ColonyCommandTests
                     Placement p = w.CurrentPlacement;
                     Messages.Clear();   // a message is a window over the bar and swallows real input beneath it
                     InputProbe.Clear();
-                    process = Xdo.Start(ClickArgs(Center(p.SearchFieldShown ? p.Search : p.SearchIcon)));
+                    process = Xdo.Start(ClickArgs(Center(p.Search)));
                     sentAt = Time.realtimeSinceStartup;
                     attempts++;
                     return false;
                 })
                 .WaitFrames(8);
+        }
+
+        /// <summary>
+        /// A real click that changes the view state (a chip, All), repeated until the state's version moves. A click can be lost
+        /// without a trace: IMGUI numbers its controls by call order, so a control drawn earlier in the frame that appears between
+        /// the press and the release (an alert, a letter) makes the button miss its own release. The game received the click
+        /// either way (the run log says so); the attempts are written to the summary. Only a click that had no effect is
+        /// resent, after 2 s, so a toggle can never fire twice.
+        /// </summary>
+        private static void ClickUntilStateChanges(Scenario s, Roster r, string label, Func<Vector2> where)
+        {
+            System.Diagnostics.Process process = null;
+            int attempts = 0, version = -1;
+            float sentAt = 0f;
+            s.Expect($"{label}: click until the state changes", () =>
+                {
+                    if (attempts == 0 && process == null)
+                        version = ViewState.Version;
+                    if (ViewState.Version != version)
+                    {
+                        if (attempts > 1)
+                            r.Notes.Add($"{label}: {attempts} attempts");
+                        return true;
+                    }
+                    if (process != null && !process.HasExited)
+                        return false;
+                    if (process != null)
+                    {
+                        Xdo.Check(process);
+                        process = null;
+                    }
+                    if (attempts > 0 && Time.realtimeSinceStartup - sentAt < 2f)
+                        return false;   // the game gets time to react before the next try
+                    if (attempts >= 4)
+                        throw new TimeoutException($"{label}: {attempts} clicks changed nothing; input seen by the game: {InputProbe.Describe()}; {InputDiagnostics()}");
+                    Messages.Clear();   // a message is a window over the bar and swallows real input beneath it
+                    InputProbe.Clear();
+                    Vector2 at = where();
+                    CCT.Info($"input '{label}' (attempt {attempts + 1}): click at {at}; panel {TheWindow().CurrentPlacement.Panel}");
+                    process = Xdo.Start(ClickArgs(at));
+                    sentAt = Time.realtimeSinceStartup;
+                    attempts++;
+                    return false;
+                })
+                .WaitFrames(8)
+                .Do($"{label}: what the game received", () => CCT.Info($"input '{label}' arrived as: {InputProbe.Describe()}"));
         }
 
         private static Vector2 ClearButton(ColonyCommandWindow w)
@@ -270,7 +315,7 @@ namespace ColonyCommandTests
             int clicks = 0;
             void Chip(string name, int index, StatusFilter expectStatus, string expectLetters)
             {
-                ClickStepAt(s, $"click {name} ({++clicks})", () => Center(TheWindow().ChipRect(index)));
+                ClickUntilStateChanges(s, r, $"click {name} ({++clicks})", () => Center(TheWindow().ChipRect(index)));
                 s.ExpectWithin($"{name}: status {expectStatus}, the bar shows [{expectLetters}]", 20,
                     () => ViewState.Status == expectStatus && Shows(r, c, Letters(c, expectLetters)),
                     () => $"status {ViewState.Status}; {r.Last}; chip {TheWindow().ChipRect(index)}, mouse {UI.MousePositionOnUIInverted}; {InputDiagnostics()}");
@@ -286,7 +331,7 @@ namespace ColonyCommandTests
                     ViewState.MinLevel = 12;
                 })
                 .ExpectWithin("Idle and skill >= 12: A and C", 20, () => Shows(r, c, Letters(c, "AC")), () => r.Last);
-            ClickStepAt(s, "click All", () => Center(TheWindow().ChipRect(0)));
+            ClickUntilStateChanges(s, r, "click All", () => Center(TheWindow().ChipRect(0)));
             s.ExpectWithin("All: status and skill criterion gone, the search stays", 20,
                     () => ViewState.Status == StatusFilter.None && ViewState.MinLevel == ViewState.AnyLevel && ViewState.Query == Token
                         && Shows(r, c, Letters(c, "ABCDEF")), () => $"status {ViewState.Status}, min {ViewState.MinLevel}, query '{ViewState.Query}'; {r.Last}")
@@ -294,8 +339,32 @@ namespace ColonyCommandTests
                 {
                     if (!ChipLabelsMatch())
                         throw new InvalidOperationException(ChipLabelsText());
-                })
-                .Start();
+                });
+
+            // A click on the panel between its controls must not reach the map under it: a left click would change the selection
+            // and a right click would give the selected colonist an order. The control: the same click on the open ground does.
+            Vector2 Padding() { Placement p = TheWindow().CurrentPlacement; return new Vector2(p.Panel.x + 4.5f, p.Panel.y + p.Panel.height / 2f); }
+            Vector2 Ground() { Placement p = TheWindow().CurrentPlacement; return new Vector2(p.Panel.x - 30f, p.Panel.y + p.Panel.height / 2f); }
+            s.Do("select B", () =>
+            {
+                Find.Selector.ClearSelection();
+                Find.Selector.Select(c.B, playSound: false);
+            });
+            ClickStepAt(s, "click the panel's padding, where no control is", Padding);
+            s.Do("the game saw the click and the panel swallowed it: B is still selected", () =>
+            {
+                if (!InputProbe.Events.Any(e => e.IndexOf(" win raw=mouseDown", StringComparison.OrdinalIgnoreCase) >= 0))
+                    throw new InvalidOperationException($"the click never reached the window stack, so nothing was proved: {InputProbe.Describe()}");
+                if (Find.Selector.SingleSelectedThing != c.B)
+                    throw new InvalidOperationException($"a click on the panel's padding changed the selection: [{string.Join(", ", Find.Selector.SelectedObjects.Select(o => o.ToString()))}]");
+            });
+            ClickStepAt(s, "control: the same click on the open ground beside the panel", Ground);
+            s.Do("control: it changed the selection, so the check above was not vacuous", () =>
+            {
+                if (Find.Selector.SingleSelectedThing == c.B)
+                    throw new InvalidOperationException($"a click on the ground left B selected: the padding check above proves nothing ({InputProbe.Describe()})");
+            });
+            s.Start();
         }
 
         private static void AssertChipRowAt(float y)
@@ -309,8 +378,8 @@ namespace ColonyCommandTests
         {
             ColonyCommandWindow w = TheWindow();
             RosterCounts k = BarAdapter.Counts;
-            int[] want = { k.All, k.Drafted, k.Injured, k.Idle };
-            for (int i = 0; i < 4; i++)
+            int[] want = { k.All, k.Drafted, k.Injured, k.Idle, k.Inspired };
+            for (int i = 0; i < ColonyCommandWindow.ChipCount; i++)
             {
                 if (!w.ChipLabel(i).EndsWith(" " + want[i]))
                     return false;
@@ -322,8 +391,10 @@ namespace ColonyCommandTests
         {
             ColonyCommandWindow w = TheWindow();
             RosterCounts k = BarAdapter.Counts;
-            return $"labels [{w.ChipLabel(0)} | {w.ChipLabel(1)} | {w.ChipLabel(2)} | {w.ChipLabel(3)}], counts {k.All}/{k.Drafted}/{k.Injured}/{k.Idle}";
+            return $"labels [{w.ChipLabel(0)} | {w.ChipLabel(1)} | {w.ChipLabel(2)} | {w.ChipLabel(3)} | {w.ChipLabel(4)}], counts {k.All}/{k.Drafted}/{k.Injured}/{k.Idle}/{k.Inspired}";
         }
+
+        private static bool EmptyLineShown() => TheWindow().EmptyLineRect.width > 0f;
 
         // ------------------------------------------------------------------------------------------ Empty state
 
@@ -342,7 +413,7 @@ namespace ColonyCommandTests
                 .ExpectWithin("the cast is shown", 20, () => Shows(r, c, Letters(c, "ABCDEF")), () => r.Last)
                 .Do("no empty state", () =>
                 {
-                    if (TheWindow().CurrentPlacement.ShowEmpty)
+                    if (EmptyLineShown())
                         throw new InvalidOperationException("the empty-state line shows although there are results");
                 })
                 .Do("clear the query", () => ViewState.Query = "")
@@ -351,27 +422,33 @@ namespace ColonyCommandTests
             FocusSearch(s, r);
             InputStep(s, "type a query nobody matches", "type --delay 120 zzqx");
             s.ExpectWithin("the bar is empty and the empty-state line shows", 20,
-                    () => ViewState.Query == "zzqx" && !BarProbe.IsDirty(Bar) && BarProbe.CachedEntries(Bar).Count == 0 && TheWindow().CurrentPlacement.ShowEmpty,
-                    () => $"query '{ViewState.Query}', entries {BarProbe.CachedEntries(Bar).Count}, empty line {TheWindow().CurrentPlacement.ShowEmpty}")
-                .Do("the line and Reset are on screen, the field is still there, the chips are below", () =>
+                    () => ViewState.Query == "zzqx" && !BarProbe.IsDirty(Bar) && BarProbe.CachedEntries(Bar).Count == 0 && EmptyLineShown(),
+                    () => $"query '{ViewState.Query}', entries {BarProbe.CachedEntries(Bar).Count}, empty line {EmptyLineShown()}")
+                .Do("the line and Reset are on screen inside the panel, the field is still there, the chips are above", () =>
                 {
-                    Placement p = TheWindow().CurrentPlacement;
+                    ColonyCommandWindow w = TheWindow();
+                    Placement p = w.CurrentPlacement;
                     var screen = new Rect(0f, 0f, UI.screenWidth, UI.screenHeight);
-                    foreach ((string name, Rect rect) in new[] { ("empty line", p.Empty), ("Reset", TheWindow().ResetRect), ("search", p.Search), ("chips", p.Strip) })
+                    foreach ((string name, Rect rect) in new[] { ("empty line", w.EmptyLineRect), ("Reset", w.ResetButtonRect), ("search", p.Search), ("panel", p.Panel) })
                     {
                         if (rect.width <= 0f || rect.xMin < 0f || rect.yMin < 0f || rect.xMax > screen.xMax || rect.yMax > screen.yMax)
                             throw new InvalidOperationException($"{name} {rect} is not on the {screen} screen");
                     }
-                    if (p.Strip.yMin < p.Empty.yMax)
-                        throw new InvalidOperationException($"the chips {p.Strip} overlap the empty-state line {p.Empty}");
+                    foreach ((string name, Rect rect) in new[] { ("empty line", w.EmptyLineRect), ("Reset", w.ResetButtonRect), ("search", p.Search) })
+                    {
+                        if (rect.xMin < p.Panel.xMin || rect.xMax > p.Panel.xMax || rect.yMin < p.Panel.yMin || rect.yMax > p.Panel.yMax)
+                            throw new InvalidOperationException($"{name} {rect} is outside the panel {p.Panel}");
+                    }
+                    if (w.EmptyLineRect.Overlaps(w.ResetButtonRect))
+                        throw new InvalidOperationException($"the empty-state line {w.EmptyLineRect} overlaps Reset {w.ResetButtonRect}");
+                    if (w.ChipRect(4).yMax > w.ResetButtonRect.yMin)
+                        throw new InvalidOperationException($"the chips (last row ends at {w.ChipRect(4).yMax}) overlap Reset {w.ResetButtonRect}");
                     AssertChipRowAt(stripY);   // an empty result must not move the chips either
-                    if (TheWindow().ResetRect.xMax > p.Empty.xMax + 0.5f || TheWindow().ResetRect.xMin < p.Empty.xMin)
-                        throw new InvalidOperationException($"Reset {TheWindow().ResetRect} is outside its line {p.Empty}");
                 });
-            ClickStepAt(s, "click Reset", () => Center(TheWindow().ResetRect));
+            ClickStepAt(s, "click Reset", () => Center(TheWindow().ResetButtonRect));
             s.ExpectWithin("Reset: the state is at its defaults, the field is empty, the bar is vanilla again", 20, () =>
-                    !ViewState.AnythingSet && TheWindow().Search.filter.Text == "" && !TheWindow().CurrentPlacement.ShowEmpty && VanillaBack(r),
-                    () => $"anything set {ViewState.AnythingSet}, field '{TheWindow().Search.filter.Text}', empty line {TheWindow().CurrentPlacement.ShowEmpty}; {r.Last}");
+                    !ViewState.AnythingSet && TheWindow().Search.filter.Text == "" && !EmptyLineShown() && VanillaBack(r),
+                    () => $"anything set {ViewState.AnythingSet}, field '{TheWindow().Search.filter.Text}', empty line {EmptyLineShown()}; {r.Last}");
 
             // A status nobody satisfies is an empty result too.
             s.Do("a name that matches only a dead colonist, with the Drafted status (a corpse is never drafted)", () =>
@@ -380,9 +457,9 @@ namespace ColonyCommandTests
                     ViewState.Status = StatusFilter.Drafted;
                 })
                 .ExpectWithin("the bar is empty and the line shows", 20,
-                    () => !BarProbe.IsDirty(Bar) && BarProbe.CachedEntries(Bar).Count == 0 && TheWindow().CurrentPlacement.ShowEmpty,
-                    () => $"entries {BarProbe.CachedEntries(Bar).Count}, line {TheWindow().CurrentPlacement.ShowEmpty}");
-            ClickStepAt(s, "click Reset", () => Center(TheWindow().ResetRect));
+                    () => !BarProbe.IsDirty(Bar) && BarProbe.CachedEntries(Bar).Count == 0 && EmptyLineShown(),
+                    () => $"entries {BarProbe.CachedEntries(Bar).Count}, line {EmptyLineShown()}");
+            ClickStepAt(s, "click Reset", () => Center(TheWindow().ResetButtonRect));
             s.ExpectWithin("everything cleared", 20, () => !ViewState.AnythingSet && TheWindow().Search.filter.Text == "" && VanillaBack(r), () => r.Last)
                 .Start();
         }
@@ -492,27 +569,99 @@ namespace ColonyCommandTests
 
         // ---------------------------------------------------------------------------------------- Controls placement
 
+        // The Learning Helper, read the way a test can without the production code's own lookup: its private window rect and its
+        // expanded flag, through reflection (the mod itself finds it in the window stack).
+        private static readonly System.Reflection.FieldInfo HelperRectField = HarmonyLib.AccessTools.Field(typeof(LearningReadout), "windowRect");
+        private static readonly System.Reflection.FieldInfo HelperExpandedField = HarmonyLib.AccessTools.Field(typeof(LearningReadout), "showAllMode");
+
+        /// <summary>Vanilla's own condition for drawing the Learning Helper (<c>LearningReadout.LearningReadoutOnGUI</c>).</summary>
+        private static bool HelperShown =>
+            !TutorSystem.TutorialMode && TutorSystem.AdaptiveTrainingEnabled
+            && (Find.PlaySettings.showLearningHelper || Find.Tutor.learningReadout.ActiveConceptsCount != 0);
+
+        private static Rect HelperRect() => (Rect)HelperRectField.GetValue(Find.Tutor.learningReadout);
+
+        private static void SetHelperExpanded(bool on) => HelperExpandedField.SetValue(Find.Tutor.learningReadout, on);
+
+        private static readonly System.Reflection.FieldInfo HelperConceptsField = HarmonyLib.AccessTools.Field(typeof(LearningReadout), "activeConcepts");
+
+        /// <summary>
+        /// Vanilla also keeps the Learning Helper up while a concept is active, whatever the setting says, and the game activates
+        /// concepts as it goes (an injury, a death): a test that hides the helper must drop them first.
+        /// </summary>
+        private static void DropActiveConcepts() => ((List<ConceptDef>)HelperConceptsField.GetValue(Find.Tutor.learningReadout)).Clear();
+
+        /// <summary>Where vanilla puts the alerts (<c>AlertsReadout.AlertsReadoutOnGUI</c>): a 154 px column ending at the top of the letters.</summary>
+        private static Rect AlertsRect()
+        {
+            float height;
+            using (new TextBlock(GameFont.Small))
+                height = Find.Alerts.AlertsHeight;
+            float top = Find.LetterStack.LastTopY - height;
+            return new Rect(UI.screenWidth - 154f, top, 154f, height);
+        }
+
+        /// <summary>The panel sits right under the Learning Helper, flush with it (same left edge, same width), and nothing of it is above the helper's bottom.</summary>
+        private static bool PanelUnderHelper(Roster r)
+        {
+            Placement p = TheWindow().CurrentPlacement;
+            Rect lh = HelperRect();
+            if (!HelperShown || lh.width <= 0f)
+            {
+                r.Last = "the Learning Helper is not drawn yet";
+                return false;
+            }
+            if (!p.Visible || Mathf.Abs(p.Panel.yMin - (lh.yMax + RightColumn.Gap)) > 0.5f)
+            {
+                r.Last = $"the panel {p.Panel} does not start {RightColumn.Gap} px under the Learning Helper {lh} yet";
+                return false;
+            }
+            if (Mathf.Abs(p.Panel.x - lh.x) > 0.5f || Mathf.Abs(p.Panel.width - lh.width) > 0.5f)
+                throw new InvalidOperationException($"the panel {p.Panel} is not flush with the Learning Helper {lh} (left edge and width)");
+            r.Last = "";
+            return true;
+        }
+
         // Precondition: the map's own 3 colonists, then topped up to 6, 12 and 24 (1 to 3 rows, shrinking portraits), a caravan
-        // (a second group, frames), a view, the bar switched off. Trigger: where the controls are, from the real bar's lists;
-        // and the pure layout over screen sizes, bar shapes and a text too wide for the screen.
-        // Failure modes: a control overlapping a portrait, its name label, a group frame, the alert column at the right edge,
-        // each other or the edge of the screen; the controls staying on screen with the bar hidden; no collapse when the chips
-        // do not fit.
+        // (a second group, frames), the Learning Helper switched on (the harness profile has it off), a view, the bar switched off.
+        // Trigger: where the panel is, from the real bar's lists and the real Learning Helper window (shown, hidden, expanded);
+        // and the pure layout over screen sizes, free heights and row states.
+        // Failure modes: the panel overlapping a portrait, its name label or a group frame, the Learning Helper (not following it
+        // when it is hidden or grows), the alert column or the screen's edge, or one control another; a control outside the panel;
+        // the panel staying on screen with the bar hidden; no fold when the column is too short for the whole panel, a fold
+        // decided by the rows shown (Reset appearing would fold it under the cursor), or one that flickers (no hysteresis).
         private static void ControlsPlacement()
         {
             var s = new Scenario("Controls placement", 4000000);
             Roster r = Prelude(s, 3);
             Caravan caravan = null;
             var members = new List<Pawn>();
+            bool adaptive = false, showHelper = true;
             s.OnFinish(() =>
             {
                 Find.PlaySettings.showColonistBar = true;
+                SetHelperExpanded(false);
+                Prefs.AdaptiveTrainingEnabled = adaptive;
+                Find.PlaySettings.showLearningHelper = showHelper;
                 if (caravan != null && !caravan.Destroyed)
                     Find.WorldObjects.Remove(caravan);
                 foreach (Pawn p in members.Where(p => !p.Destroyed))
                     p.Destroy();
             });
-            s.Do("the pure layout over screen sizes and bar shapes", () => PureLayoutSweep(r));
+            s.Do("the pure layout over screen sizes, free heights and row states", () => PureLayoutSweep(r));
+            s.Do("switch the Learning Helper on", () =>
+                {
+                    adaptive = Prefs.AdaptiveTrainingEnabled;
+                    showHelper = Find.PlaySettings.showLearningHelper;
+                    Prefs.AdaptiveTrainingEnabled = true;
+                    Find.PlaySettings.showLearningHelper = true;
+                })
+                .ExpectWithin("the Learning Helper is drawn and the panel starts right under it", 60, () => PanelUnderHelper(r), () => r.Last)
+                .Do("the panel is whole in the test window, and its width is the helper's", () =>
+                {
+                    AssertPanelFull("nothing set");
+                    r.Notes.Add($"Learning Helper {HelperRect()}, panel {TheWindow().CurrentPlacement.Panel}");
+                });
             foreach (int n in new[] { 3, 6, 12, 24 })
             {
                 int total = n;
@@ -538,8 +687,39 @@ namespace ColonyCommandTests
                 })
                 .ExpectWithin("26 colonists", 30, () => CaptureVanilla(r, 26), () => r.Last)
                 .WaitFrames(8)
-                .Do("two groups: the controls are clear of the portraits and the group frames", () => AssertControlsClear(r, "two groups"))
-                .Do("hide the colonist bar (a vanilla setting)", () => Find.PlaySettings.showColonistBar = false)
+                .Do("two groups: the controls are clear of the portraits and the group frames", () => AssertControlsClear(r, "two groups"));
+
+            // The panel follows the Learning Helper: up when it goes, down (and folded) when it grows.
+            s.Do("hide the Learning Helper (a vanilla setting, and no active concept either)", () =>
+                {
+                    Find.PlaySettings.showLearningHelper = false;
+                    DropActiveConcepts();
+                })
+                .ExpectWithin("the panel moved up to the top margin", 30,
+                    () => !HelperShown && Mathf.Abs(TheWindow().CurrentPlacement.Panel.yMin - RightColumn.TopMargin) <= 0.5f,
+                    () => $"panel {TheWindow().CurrentPlacement.Panel}, helper shown {HelperShown} ({Find.Tutor.learningReadout.ActiveConceptsCount} active concept(s)), helper rect {HelperRect()}")
+                .Do("show it again", () => Find.PlaySettings.showLearningHelper = true)
+                .ExpectWithin("the panel is under it again", 60, () => PanelUnderHelper(r), () => r.Last)
+                .Do("expand the Learning Helper (the plus button: every concept listed, half the screen tall)", () => SetHelperExpanded(true))
+                .ExpectWithin("the panel went below the grown helper and folded: a compact panel does not fit the whole column any more", 60,
+                    () => HelperRect().height > 150f && PanelUnderHelper(r) && TheWindow().CurrentPlacement.Compact,
+                    () => $"helper {HelperRect()}, panel {TheWindow().CurrentPlacement.Panel}, compact {TheWindow().CurrentPlacement.Compact}; {r.Last}")
+                .Do("the folded panel is clear of the portraits, holds the field and the Filters button, and the Filters menu has every action", () =>
+                {
+                    AssertControlsClear(r, "helper expanded");
+                    ColonyCommandWindow w = TheWindow();
+                    if (w.CurrentPlacement.Filters.width <= 0f || w.CurrentPlacement.Search.width < ControlsLayout.MinCompactSearchWidth)
+                        throw new InvalidOperationException($"folded panel: Filters {w.CurrentPlacement.Filters}, search {w.CurrentPlacement.Search}");
+                    int options = w.FoldedMenuOptions().Count;
+                    if (options < ColonyCommandWindow.ChipCount + 2)
+                        throw new InvalidOperationException($"the Filters menu has {options} options: it is missing the chips, Skill or Sort");
+                })
+                .Do("collapse the Learning Helper", () => SetHelperExpanded(false))
+                .ExpectWithin("the panel is whole again right under the short helper", 80,
+                    () => PanelUnderHelper(r) && !TheWindow().CurrentPlacement.Compact,
+                    () => $"helper {HelperRect()}, panel {TheWindow().CurrentPlacement.Panel}, compact {TheWindow().CurrentPlacement.Compact}; {r.Last}");
+
+            s.Do("hide the colonist bar (a vanilla setting)", () => Find.PlaySettings.showColonistBar = false)
                 .WaitFrames(8)
                 .Do("the controls went with it: nothing placed, nothing focused, the game's hotkeys are free", () =>
                 {
@@ -554,7 +734,8 @@ namespace ColonyCommandTests
 
         private static void AssertControlsClear(Roster r, string label)
         {
-            Placement p = TheWindow().CurrentPlacement;
+            ColonyCommandWindow w = TheWindow();
+            Placement p = w.CurrentPlacement;
             if (!p.Visible)
                 throw new InvalidOperationException($"{label}: the controls are not placed");
             ColonistBar bar = Bar;
@@ -569,24 +750,36 @@ namespace ColonyCommandTests
             foreach (Vector2 loc in BarProbe.CachedLocs(bar))
                 drawn.Add(new Rect(loc.x - margin, loc.y - margin, size.x + 2f * margin, margin + size.y + Mathf.Max(Mathf.Max(20f, 32f * scale), margin)));
             var screen = new Rect(0f, 0f, UI.screenWidth, UI.screenHeight);
-            var controls = new List<(string name, Rect rect)> { ("chips", p.Strip) };
-            if (p.SearchFieldShown)
-                controls.Add(("search field", p.Search));
-            if (p.SearchCompact)
-                controls.Add(("search icon", p.SearchIcon));
-            if (p.ShowEmpty)
-                controls.Add(("empty line", p.Empty));
+            var controls = new List<(string name, Rect rect)> { ("search field", p.Search) };
+            if (p.Compact)
+                controls.Add(("Filters button", p.Filters));
+            else
+            {
+                string[] chips = { "All", "Drafted", "Injured", "Idle", "Inspired" };
+                for (int i = 0; i < ColonyCommandWindow.ChipCount; i++)
+                    controls.Add(($"{chips[i]} chip", w.ChipRect(i)));
+                controls.Add(("Skill", w.SkillRect));
+                if (w.LevelRect.width > 0f)
+                    controls.Add(("Level", w.LevelRect));
+                controls.Add(("Sort", w.SortRect));
+                if (w.DirectionRect.width > 0f)
+                    controls.Add(("direction", w.DirectionRect));
+                if (w.ResetButtonRect.width > 0f)
+                    controls.Add(("Reset", w.ResetButtonRect));
+            }
+            if (w.EmptyLineRect.width > 0f)
+                controls.Add(("empty line", w.EmptyLineRect));
             foreach ((string name, Rect rect) in controls)
             {
                 if (rect.width <= 0f || rect.xMin < 0f || rect.yMin < 0f || rect.xMax > screen.xMax || rect.yMax > screen.yMax)
                     throw new InvalidOperationException($"{label}: the {name} {rect} is not on the {screen.size} screen");
-                if (rect.xMax > UI.screenWidth - ControlsLayout.AlertsWidth)
-                    throw new InvalidOperationException($"{label}: the {name} {rect} reaches into the alert column (x > {UI.screenWidth - ControlsLayout.AlertsWidth})");
-                foreach (Rect portrait in drawn)
-                {
-                    if (rect.Overlaps(portrait))
-                        throw new InvalidOperationException($"{label}: the {name} {rect} overlaps the portrait area {portrait}");
-                }
+                if (rect.xMin < p.Panel.xMin || rect.xMax > p.Panel.xMax || rect.yMin < p.Panel.yMin || rect.yMax > p.Panel.yMax)
+                    throw new InvalidOperationException($"{label}: the {name} {rect} is outside the panel {p.Panel}");
+            }
+            foreach (Rect portrait in drawn)
+            {
+                if (p.Panel.Overlaps(portrait))
+                    throw new InvalidOperationException($"{label}: the panel {p.Panel} overlaps the portrait area {portrait}");
             }
             for (int i = 0; i < controls.Count; i++)
             {
@@ -596,35 +789,45 @@ namespace ColonyCommandTests
                         throw new InvalidOperationException($"{label}: the {controls[i].name} {controls[i].rect} overlaps the {controls[j].name} {controls[j].rect}");
                 }
             }
-            r.Notes.Add($"{label}: scale {scale:F2}, {groups} group(s), strip y {p.Strip.y:F0}, {(p.SearchCompact ? "search icon" : "search field")}");
+            Rect alerts = AlertsRect();
+            if (alerts.height > 0f && !p.Compact && p.Panel.Overlaps(alerts))
+                throw new InvalidOperationException($"{label}: the whole panel {p.Panel} overlaps the alert column {alerts}");
+            if (HelperShown)
+            {
+                Rect lh = HelperRect();
+                if (p.Panel.yMin < lh.yMax || p.Panel.Overlaps(lh))
+                    throw new InvalidOperationException($"{label}: the panel {p.Panel} overlaps the Learning Helper {lh}");
+            }
+            r.Notes.Add($"{label}: scale {scale:F2}, {groups} group(s), panel {p.Panel.x:F0},{p.Panel.y:F0} {p.Panel.width:F0}x{p.Panel.height:F0}{(p.Compact ? " compact" : "")}");
         }
 
-        /// <summary>ControlsLayout.Compute alone: screens from the 800x500 minimum to ultrawide, bars from one portrait to the widest vanilla allows.</summary>
+        /// <summary>ControlsLayout.Compute alone: screens from the 800x500 minimum to ultrawide, free heights around the fold, every row state.</summary>
         private static void PureLayoutSweep(Roster r)
         {
-            int cases = 0, compactSearch = 0, compactStrip = 0;
-            foreach (int w in new[] { 800, 1024, 1280, 1600, 1920, 2560, 3440 })
+            int cases = 0, compact = 0, whole = 0;
+            float max = ControlsLayout.HeightOfRows(ControlsLayout.MaxRows);
+            foreach (int w in new[] { 800, 1024, 1280, 1920, 2560, 3440 })
             {
                 foreach (int h in new[] { 500, 720, 1080, 1440 })
                 {
-                    float maxHalf = (w - 520f) / 2f;   // the vanilla bar: screenWidth - 520 wide, centred
-                    foreach (float half in new[] { 14f, 96f, maxHalf * 0.5f, maxHalf })
+                    foreach (float top in new[] { 8f, 46f, 52f, 120f, 372f })
                     {
-                        foreach (float bottom in new[] { 80f, 119.7f, 180f })
+                        foreach (float free in new[] { 0f, 20f, 40f, 100f, max - 1f, max, max + 10f, max + ControlsLayout.Hysteresis - 1f, max + ControlsLayout.Hysteresis, 600f })
                         {
-                            foreach (bool empty in new[] { false, true })
+                            float bottom = Mathf.Min(top + free, h);
+                            foreach (bool reset in new[] { false, true })
                             {
-                                foreach (float stripWidth in new[] { 258f, 560f, 5000f })
+                                foreach (bool empty in new[] { false, true })
                                 {
-                                    var bar = new BarMetrics { HasPortraits = true, MinX = w / 2f - half, MaxX = w / 2f + half, BottomY = bottom, PortraitHeight = 48f };
-                                    foreach (bool open in new[] { false, true })
-                                    {
-                                        Placement p = ControlsLayout.Compute(w, h, bar, empty, stripWidth, 90f, 210f, open);
-                                        CheckPlacement(p, w, h, bar, empty, stripWidth, open);
-                                        cases++;
-                                        compactSearch += p.SearchCompact ? 1 : 0;
-                                        compactStrip += p.StripCompact ? 1 : 0;
-                                    }
+                                    Placement fresh = ControlsLayout.Compute(w, h, top, bottom, reset, empty, 90f, wasCompact: false);
+                                    Placement latched = ControlsLayout.Compute(w, h, top, bottom, reset, empty, 90f, wasCompact: true);
+                                    CheckPlacement(fresh, w, h, top, bottom, reset, empty, false);
+                                    CheckPlacement(latched, w, h, top, bottom, reset, empty, true);
+                                    if (fresh.Compact && !latched.Compact)
+                                        throw new InvalidOperationException($"hysteresis the wrong way round at {w}x{h}, top {top}, bottom {bottom}: folded when fresh, whole when it was folded");
+                                    cases += 2;
+                                    compact += (fresh.Compact ? 1 : 0) + (latched.Compact ? 1 : 0);
+                                    whole += (fresh.Compact ? 0 : 1) + (latched.Compact ? 0 : 1);
                                 }
                             }
                         }
@@ -633,51 +836,82 @@ namespace ColonyCommandTests
             }
             foreach ((int w, int h) in new[] { (799, 500), (800, 499), (640, 360), (320, 200) })
             {
-                Placement p = ControlsLayout.Compute(w, h, new BarMetrics(), false, 258f, 90f, 210f);
+                Placement p = ControlsLayout.Compute(w, h, 8f, h - 100f, false, false, 90f);
                 if (p.Visible)
                     throw new InvalidOperationException($"the controls show at {w}x{h}, below the 800x500 the colonist bar needs");
             }
-            if (compactSearch == 0 || compactStrip == 0)
-                throw new InvalidOperationException($"the sweep never reached the compact layouts (search {compactSearch}, strip {compactStrip}): it proves nothing about them");
-            r.Notes.Add($"pure layout: {cases} cases, {compactSearch} with the search icon, {compactStrip} with the chips folded");
+            if (compact == 0 || whole == 0)
+                throw new InvalidOperationException($"the sweep never reached both layouts (folded {compact}, whole {whole}): it proves nothing about the fold");
+            r.Notes.Add($"pure layout: {cases} cases, {whole} whole, {compact} folded");
         }
 
-        private static void CheckPlacement(Placement p, int w, int h, BarMetrics bar, bool empty, float stripWidth, bool open)
+        private static void CheckPlacement(Placement p, int w, int h, float top, float bottom, bool reset, bool empty, bool wasCompact)
         {
-            string at = $"{w}x{h}, bar {bar.MinX:F0}..{bar.MaxX:F0} to y {bar.BottomY:F0}, empty {empty}, strip {stripWidth}, open {open}";
+            string at = $"{w}x{h}, free {top}..{bottom}, reset {reset}, empty {empty}, was folded {wasCompact}";
             if (!p.Visible)
                 throw new InvalidOperationException($"not visible at {at}");
-            float limit = w - ControlsLayout.AlertsWidth;
-            var all = new List<(string name, Rect rect)> { ("chips", p.Strip) };
-            if (p.SearchFieldShown)
-                all.Add(("search field", p.Search));
-            if (p.SearchCompact)
-                all.Add(("search icon", p.SearchIcon));
-            if (empty)
-                all.Add(("empty line", p.Empty));
-            // The portraits, labels and frames end at BottomY and span MinX..MaxX (the layout is handed the unfiltered bar's footprint).
-            var bounds = Rect.MinMaxRect(bar.MinX, 0f, bar.MaxX, bar.BottomY);
-            foreach ((string name, Rect rect) in all)
+            float max = ControlsLayout.HeightOfRows(ControlsLayout.MaxRows);
+            // The fold is decided by the tallest panel, never by the rows shown: Reset or the empty line appearing must not fold it.
+            bool wantCompact = bottom - top < max + (wasCompact ? ControlsLayout.Hysteresis : 0f);
+            if (p.Compact != wantCompact)
+                throw new InvalidOperationException($"folded {p.Compact}, expected {wantCompact} at {at}");
+            var screen = new Rect(0f, 0f, w, h);
+            if (p.Panel.xMin < 0f || p.Panel.yMin < 0f || p.Panel.xMax > w || p.Panel.yMax > h)
+                throw new InvalidOperationException($"the panel {p.Panel} leaves the screen at {at}");
+            if (Mathf.Abs(p.Panel.xMax - (w - ControlsLayout.RightMargin)) > 0.01f || Mathf.Abs(p.Panel.width - ControlsLayout.PanelWidth) > 0.01f)
+                throw new InvalidOperationException($"the panel {p.Panel} is not the Learning Helper's column at {at}");
+            float widestBarRight = w / 2f + (w - 520f) / 2f;   // the vanilla bar: screenWidth - 520 wide, centred
+            if (p.Panel.xMin < widestBarRight)
+                throw new InvalidOperationException($"the panel {p.Panel} reaches into the widest possible bar (ends at {widestBarRight}) at {at}");
+            if (!p.Compact && (Mathf.Abs(p.Panel.yMin - top) > 0.01f || p.Panel.yMax > bottom + 0.01f))
+                throw new InvalidOperationException($"the whole panel {p.Panel} is not inside the free column {top}..{bottom} at {at}");
+            if (p.Compact && bottom - top >= ControlsLayout.HeightOfRows(2) && (p.Panel.yMin < top - 0.01f || p.Panel.yMax > bottom + 0.01f))
+                throw new InvalidOperationException($"the folded panel {p.Panel} is not inside the free column {top}..{bottom}, which holds it, at {at}");
+            var controls = new List<(string name, Rect rect)> { ("search field", p.Search) };
+            if (p.Compact)
             {
-                if (rect.xMin < 0f || rect.yMin < 0f || rect.xMax > w || rect.yMax > h)
-                    throw new InvalidOperationException($"the {name} {rect} leaves the screen at {at}");
-                if (rect.xMax > limit + 0.01f)
-                    throw new InvalidOperationException($"the {name} {rect} reaches into the alert column (x > {limit}) at {at}");
-                if (name != "empty line" && rect.Overlaps(bounds) && !(name == "search icon" && false))
-                    throw new InvalidOperationException($"the {name} {rect} overlaps the bar {bounds} at {at}");
+                controls.Add(("Filters button", p.Filters));
+                if (p.ResetRow >= 0)
+                    throw new InvalidOperationException($"a folded panel has a Reset row ({p.ResetRow}) at {at}");
+                if (p.Search.width < ControlsLayout.MinCompactSearchWidth || p.Filters.width < ControlsLayout.MinFiltersWidth)
+                    throw new InvalidOperationException($"search {p.Search} or Filters {p.Filters} too narrow at {at}");
+                if (empty != (p.EmptyRow == 1))
+                    throw new InvalidOperationException($"the folded panel's empty row is {p.EmptyRow} at {at}");
             }
-            if (p.Strip.yMin < bar.BottomY)
-                throw new InvalidOperationException($"the chips {p.Strip} start above the bar's end {bar.BottomY} at {at}");
-            for (int i = 0; i < all.Count; i++)
+            else
             {
-                for (int j = i + 1; j < all.Count; j++)
+                for (int row = 1; row < ControlsLayout.BaseRows; row++)
+                    controls.Add(($"row {row}", p.Row(row)));
+                if ((p.ResetRow >= 0) != reset || (p.EmptyRow >= 0) != empty)
+                    throw new InvalidOperationException($"Reset row {p.ResetRow}, empty row {p.EmptyRow} at {at}");
+                if (p.ResetRow >= 0 && p.ResetRow != ControlsLayout.BaseRows)
+                    throw new InvalidOperationException($"the Reset row is {p.ResetRow} at {at}");
+                for (int row = 2; row <= 5; row++)
                 {
-                    if (all[i].rect.Overlaps(all[j].rect))
-                        throw new InvalidOperationException($"the {all[i].name} {all[i].rect} overlaps the {all[j].name} {all[j].rect} at {at}");
+                    Rect a = p.Cell(row, 0), b = p.Cell(row, 1);
+                    if (a.Overlaps(b) || a.xMin < p.Row(row).xMin - 0.01f || b.xMax > p.Row(row).xMax + 0.01f)
+                        throw new InvalidOperationException($"the two cells of row {row} overlap or leave their row at {at}");
                 }
             }
-            if (stripWidth > w - ControlsLayout.AlertsWidth - 16f && !p.StripCompact)
-                throw new InvalidOperationException($"{stripWidth} px of chips were not folded into the Filters button at {at}");
+            if (p.EmptyRow >= 0)
+                controls.Add(("empty line", p.Row(p.EmptyRow)));
+            if (p.ResetRow >= 0)
+                controls.Add(("Reset", p.Row(p.ResetRow)));
+            foreach ((string name, Rect rect) in controls)
+            {
+                if (rect.xMin < p.Panel.xMin || rect.xMax > p.Panel.xMax || rect.yMin < p.Panel.yMin || rect.yMax > p.Panel.yMax + 0.01f)
+                    throw new InvalidOperationException($"the {name} {rect} is outside the panel {p.Panel} at {at}");
+                if (!screen.Contains(new Vector2(rect.xMax - 0.01f, rect.yMax - 0.01f)))
+                    throw new InvalidOperationException($"the {name} {rect} leaves the screen at {at}");
+            }
+            for (int i = 0; i < controls.Count; i++)
+            {
+                for (int j = i + 1; j < controls.Count; j++)
+                {
+                    if (controls[i].rect.Overlaps(controls[j].rect))
+                        throw new InvalidOperationException($"the {controls[i].name} {controls[i].rect} overlaps the {controls[j].name} {controls[j].rect} at {at}");
+                }
+            }
         }
 
         // ------------------------------------------------------------------------------------------ Phase 4 helpers
@@ -713,12 +947,17 @@ namespace ColonyCommandTests
                 Find.WindowStack.TryRemove(menu, doCloseSound: false);
         }
 
-        /// <summary>The unfolded strip is what these scenarios click: at 800 px it has to fit with everything set (the folded menu has its own checks).</summary>
-        private static void AssertStripUnfolded(string state)
+        /// <summary>The whole panel is what these scenarios click: the test window is tall enough for it (the folded menu has its own checks).</summary>
+        private static void AssertPanelFull(string state)
         {
             Placement p = TheWindow().CurrentPlacement;
-            if (p.StripCompact)
-                throw new InvalidOperationException($"the strip is folded into the Filters button with {state}: the buttons these steps click do not exist (strip {p.Strip}, skill {TheWindow().SkillLabel}, sort {TheWindow().SortLabel})");
+            if (p.Compact)
+            {
+                Rect alerts = AlertsRect();
+                throw new InvalidOperationException($"the panel is folded into the Filters button with {state}: the buttons these steps click do not exist " +
+                    $"(panel {p.Panel}; the right column is free from y {p.Panel.yMin} to {alerts.yMin - RightColumn.Gap}, the whole panel needs {ControlsLayout.HeightOfRows(ControlsLayout.MaxRows)}; " +
+                    $"alerts {alerts.height:F0} px, {Find.LetterStack.LettersListForReading.Count} letter(s), letters' top {Find.LetterStack.LastTopY:F0}; skill {TheWindow().SkillLabel}, sort {TheWindow().SortLabel})");
+            }
         }
 
         private static string LevelOption(int level) => (string)"ColonyCommand_LevelValue".Translate(level);
@@ -789,7 +1028,7 @@ namespace ColonyCommandTests
             {
                 int lv = level;
                 string want = expect;
-                s.Do($"the strip is unfolded with a skill and a level set", () => AssertStripUnfolded($"{c.Skill.defName} and a level"));
+                s.Do($"the panel is whole with a skill and a level set", () => AssertPanelFull($"{c.Skill.defName} and a level"));
                 ClickStepAt(s, $"click the Level button for {lv}+", () => Center(TheWindow().LevelRect));
                 s.ExpectWithin("the level dropdown is open", 10, () => OpenMenu() != null)
                     .Do($"choose {lv}+", () => ChooseOption(LevelOption(lv)))
@@ -866,7 +1105,7 @@ namespace ColonyCommandTests
 
             s.Do("choose a skill (through the state: the Skill dropdown is proven by Skill filter)", () => ViewState.Skill = c.Skill)
                 .WaitFrames(6)
-                .Do("the strip is unfolded with a skill, a sort and its direction", () => AssertStripUnfolded("a skill and a sort"));
+                .Do("the panel is whole with a skill, a sort and its direction", () => AssertPanelFull("a skill and a sort"));
             ClickStepAt(s, "click the Sort button", () => Center(TheWindow().SortRect));
             s.ExpectWithin("the sort dropdown is open", 10, () => OpenMenu() != null)
                 .Do("now there is a skill sort too", () =>
@@ -913,7 +1152,7 @@ namespace ColonyCommandTests
             s.WaitFrames(8)
                 .Do("nothing is set: no Reset button, and no Reset in the folded menu", () =>
                 {
-                    if (TheWindow().StripResetRect.width > 0f)
+                    if (TheWindow().ResetButtonRect.width > 0f)
                         throw new InvalidOperationException("the Reset button shows although nothing is set");
                     if (TheWindow().FoldedMenuOptions().Any(o => o.Label == (string)"ColonyCommand_Reset".Translate()))
                         throw new InvalidOperationException("the folded menu offers Reset although nothing is set");
@@ -935,8 +1174,8 @@ namespace ColonyCommandTests
                 if (BarProbe.ReorderCalls != 0)
                     throw new InvalidOperationException($"{BarProbe.ReorderCalls} Reorder call(s) reached the vanilla writer from the view");
             });
-            s.Do("the strip is unfolded with everything set", () => AssertStripUnfolded("a query, a status, a skill, a level, a sort and a direction"));
-            ClickStepAt(s, "click the Reset button", () => Center(TheWindow().StripResetRect));
+            s.Do("the panel is whole with everything set", () => AssertPanelFull("a query, a status, a skill, a level, a sort and a direction"));
+            ClickStepAt(s, "click the Reset button", () => Center(TheWindow().ResetButtonRect));
             s.ExpectWithin("Reset: all six pieces of state at their defaults, the field empty, the vanilla bar exactly back", 20, () =>
                     !ViewState.AnythingSet && ViewState.Query == "" && ViewState.Status == StatusFilter.None && ViewState.Skill == null
                     && ViewState.MinLevel == ViewState.AnyLevel && ViewState.Sort == SortKey.Vanilla && !ViewState.Descending
@@ -945,7 +1184,7 @@ namespace ColonyCommandTests
                 .WaitFrames(8)
                 .Do("and the Reset button is gone again", () =>
                 {
-                    if (TheWindow().StripResetRect.width > 0f)
+                    if (TheWindow().ResetButtonRect.width > 0f)
                         throw new InvalidOperationException("the Reset button still shows");
                 });
             DragStep(s, "after Reset: a real drag on the bar", 0, 2);
@@ -958,7 +1197,7 @@ namespace ColonyCommandTests
                 })
                 .ExpectWithin("vanilla order back after restoring the display orders", 20, () => VanillaBack(r), () => r.Last);
 
-            // The compact strip's menu does the same.
+            // The compact panel's menu does the same.
             s.Do("set a status and a sort, then run Reset from the folded menu's options", () =>
                 {
                     ViewState.Status = StatusFilter.Drafted;

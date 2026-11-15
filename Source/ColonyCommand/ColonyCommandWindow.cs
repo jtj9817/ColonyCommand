@@ -9,28 +9,34 @@ namespace ColonyCommand
     /// <summary>
     /// The mod's single vanilla window and its controls. The window's rect is exactly the search field, so it can never cover
     /// a portrait or steal a click from one; the field is the window's <see cref="CommonSearchWidget"/>, which makes the base
-    /// window draw it and makes vanilla suppress the game's hotkeys while it is focused. The chip row and the empty-state line
-    /// are drawn in screen space from <see cref="ExtraOnGUI"/> (windows live in <c>UIRoot.windows</c>, never saved). Placement
-    /// is <see cref="ControlsLayout"/>, recomputed on every event from the bar's own lists, so it follows the bar.
+    /// window draw it and makes vanilla suppress the game's hotkeys while it is focused. Everything else is drawn in screen
+    /// space from <see cref="ExtraOnGUI"/> (windows live in <c>UIRoot.windows</c>, never saved): one panel in the right column,
+    /// as wide as the Learning Helper and right under it. Placement is <see cref="ControlsLayout"/> fed by
+    /// <see cref="RightColumn"/>, recomputed on every event, so it follows the Learning Helper and the alerts.
     /// </summary>
     public class ColonyCommandWindow : Window
     {
+        /// <summary>All, Drafted, Injured, Idle, Inspired: the index is the chip's number everywhere below.</summary>
+        public const int ChipCount = 5;
+
         private readonly QuickSearchWidget search = new QuickSearchWidget();
         private int lastSeenVersion = -1;
         private Placement placement;
-        // Compact layout: the user opened the field from the search icon (a field holding a query is never hidden).
-        private bool searchOpen, pendingFocus;
+        private bool wasCompact;
 
         private LoadedLanguage textLanguage;
-        private readonly string[] chipNames = new string[4], chipTips = new string[4], chipLabels = new string[4];
-        private readonly int[] chipLabelCounts = { -1, -1, -1, -1 };
-        private string placeholder, noMatches, reset, resetTip, filters;
+        private readonly string[] chipNames = new string[ChipCount], chipTips = new string[ChipCount], chipLabels = new string[ChipCount];
+        private readonly int[] chipLabelCounts = { -1, -1, -1, -1, -1 };
+        private string placeholder, searchTip, noMatches, reset, resetTip, filters, filtersTip, shownPlaceholder;
+        private float shownPlaceholderWidth;
 
-        // Phase 4 strip items, rebuilt when the criteria change (labels) or every event (positions).
+        // Labels of the Skill, Level, Sort and direction buttons: rebuilt when the criteria change.
         private int labelVersion = -1;
         private string skillLabel, levelLabel, sortLabel, dirLabel, skillTip, levelTip, sortTip, dirTip;
-        private float skillWidth, levelWidth, sortWidth, dirWidth, resetButtonWidth;
-        private Rect skillRect, levelRect, sortRect, dirRect, stripResetRect;
+
+        // Where each control is, as last placed. A zero-width rect means the control is not shown.
+        private readonly Rect[] chipRects = new Rect[ChipCount];
+        private Rect skillRect, levelRect, sortRect, dirRect, resetRect, emptyRect;
 
         public ColonyCommandWindow()
         {
@@ -53,7 +59,7 @@ namespace ColonyCommand
 
         public QuickSearchWidget Search => search;
 
-        /// <summary>The chip at this index (0 All, 1 Drafted, 2 Injured, 3 Idle) as last placed; meaningless while the strip is compact.</summary>
+        /// <summary>The chip at this index (0 All, 1 Drafted, 2 Injured, 3 Idle, 4 Inspired) as last placed; zero-width while the panel is compact.</summary>
         public Rect ChipRect(int index) => chipRects[index];
 
         /// <summary>
@@ -70,29 +76,28 @@ namespace ColonyCommand
         public Rect LevelRect => levelRect;
         public Rect SortRect => sortRect;
         public Rect DirectionRect => dirRect;
-        public Rect StripResetRect => stripResetRect;
+        public Rect ResetButtonRect => resetRect;
+        /// <summary>The "No matching colonists" line (zero-width unless there are no results).</summary>
+        public Rect EmptyLineRect => emptyRect;
 
-        /// <summary>What the strip's buttons say right now.</summary>
+        /// <summary>What the buttons say right now.</summary>
         public string SkillLabel => skillLabel;
         public string LevelLabel => levelLabel;
         public string SortLabel => sortLabel;
         public string DirectionLabel => dirLabel;
 
-        /// <summary>The options of the Filters menu the compact strip opens (the same actions as the buttons it stands in for).</summary>
+        /// <summary>The options of the Filters menu the compact panel opens (the same actions as the buttons it stands in for).</summary>
         public List<FloatMenuOption> FoldedMenuOptions() => FilterMenu(ViewState.Snapshot);
 
         /// <summary>The text of the chip at this index, count included.</summary>
         public string ChipLabel(int index) => chipLabels[index];
-
-        /// <summary>The Reset button of the empty-state line as last placed.</summary>
-        public Rect ResetRect => resetRect;
 
         public override Vector2 InitialSize => Vector2.zero;
 
         protected override float Margin => 0f;
 
         /// <summary>Null while the controls are hidden, so a hidden field can neither hold focus nor swallow the game's hotkeys.</summary>
-        public override QuickSearchWidget CommonSearchWidget => placement.Visible && placement.SearchFieldShown ? search : null;
+        public override QuickSearchWidget CommonSearchWidget => placement.Visible ? search : null;
 
         protected override void SetInitialSizeAndPosition()
         {
@@ -118,7 +123,7 @@ namespace ColonyCommand
         /// <summary>
         /// Runs on every OnGUI event, after the bar was handled for that event (UIRoot_Play draws the bar, then the window
         /// stack): a change made during OnGUI is repaired before the next event reaches the bar, and the controls are placed
-        /// from the bar as it is now.
+        /// from the right column as it is now.
         /// </summary>
         public override void ExtraOnGUI()
         {
@@ -127,32 +132,25 @@ namespace ColonyCommand
             EnsureTexts();
             SearchFocused = search.CurrentlyFocused();
             UpdatePlacement();
-            windowRect = placement.Visible && placement.SearchFieldShown ? placement.Search : new Rect(0f, 0f, 0f, 0f);
-            if (!placement.Visible || !placement.SearchFieldShown)
-                search.Unfocus();
+            windowRect = placement.Visible ? placement.Search : new Rect(0f, 0f, 0f, 0f);
             if (!placement.Visible)
+            {
+                search.Unfocus();
                 return;
+            }
             SyncSearchFromState();
             RosterCounts counts = BarAdapter.Counts;
             search.noResultsMatched = ViewState.Snapshot.HasQuery && counts.Eligible > 0 && counts.All == 0;   // the text turns red
             HandleEnter();
+            Look.DrawPanel(placement.Panel);
+            TooltipHandler.TipRegion(placement.Search, searchTip);
             using (new TextBlock(GameFont.Small, TextAnchor.MiddleCenter))
-            {
-                if (placement.ShowEmpty)
-                    DrawEmptyState();
-                DrawStrip();
-                if (placement.SearchCompact)
-                    DrawSearchIcon();
-            }
+                DrawControls();
+            AbsorbPanelClicks();
         }
 
         public override void DoWindowContents(Rect inRect)
         {
-            if (pendingFocus)
-            {
-                pendingFocus = false;
-                search.Focus();   // the field was laid out this event: now it exists to be focused
-            }
             // The vanilla widget draws no placeholder: it is ours, over the empty, unfocused field.
             if (!search.filter.Active && !search.CurrentlyFocused())
             {
@@ -160,10 +158,21 @@ namespace ColonyCommand
                 using (new TextBlock(GameFont.Small, TextAnchor.MiddleLeft))
                 {
                     GUI.color = ColoredText.SubtleGrayColor;
-                    Widgets.Label(text, placeholder);
+                    Widgets.Label(text, PlaceholderFor(text.width));
                     GUI.color = Color.white;
                 }
             }
+        }
+
+        /// <summary>The placeholder cut to the field (the compact field is narrow); recomputed only when the width or the text changes.</summary>
+        private string PlaceholderFor(float width)
+        {
+            if (shownPlaceholder == null || Mathf.Abs(width - shownPlaceholderWidth) > 0.5f)
+            {
+                shownPlaceholderWidth = width;
+                shownPlaceholder = placeholder.Truncate(width);
+            }
+            return shownPlaceholder;
         }
 
         // ------------------------------------------------------------------------------------------ state
@@ -174,20 +183,26 @@ namespace ColonyCommand
                 return;
             textLanguage = LanguageDatabase.activeLanguage;
             placeholder = "ColonyCommand_SearchPlaceholder".Translate();
+            searchTip = "ColonyCommand_SearchTip".Translate();
+            shownPlaceholder = null;
             noMatches = "ColonyCommand_NoMatches".Translate();
             reset = "ColonyCommand_Reset".Translate();
             resetTip = "ColonyCommand_ResetTip".Translate();
             filters = "ColonyCommand_Filters".Translate();
+            filtersTip = "ColonyCommand_FiltersTip".Translate();
             chipNames[0] = "ColonyCommand_ChipAll".Translate();
             chipNames[1] = "ColonyCommand_ChipDrafted".Translate();
             chipNames[2] = "ColonyCommand_ChipInjured".Translate();
             chipNames[3] = "ColonyCommand_ChipIdle".Translate();
+            chipNames[4] = "ColonyCommand_ChipInspired".Translate();
             chipTips[0] = "ColonyCommand_ChipAllTip".Translate();
             chipTips[1] = "ColonyCommand_ChipDraftedTip".Translate();
             chipTips[2] = "ColonyCommand_ChipInjuredTip".Translate();
             chipTips[3] = "ColonyCommand_ChipIdleTip".Translate();
+            chipTips[4] = "ColonyCommand_ChipInspiredTip".Translate();
             for (int i = 0; i < chipLabelCounts.Length; i++)
                 chipLabelCounts[i] = -1;
+            labelVersion = -1;
         }
 
         /// <summary>The field shows what the state holds when something else changed it (Reset, a new game).</summary>
@@ -207,84 +222,59 @@ namespace ColonyCommand
             bool barShown = !Find.TilePicker.Active && Find.PlaySettings.showColonistBar;
             Criteria criteria = ViewState.Snapshot;
             bool empty = criteria.FilterActive && BarAdapter.Applied && BarAdapter.Shown == 0 && BarAdapter.Counts.Eligible > 0;
-            ColonistBar bar = Find.ColonistBar;
-            List<ColonistBar.Entry> entries = bar.Entries;
-            BarMetrics metrics = ControlsLayout.Measure(bar, entries.Count == 0 ? 0 : entries[entries.Count - 1].group + 1);
-            if (BarAdapter.Applied)
-                metrics = ControlsLayout.Union(metrics, BarAdapter.VanillaFootprint);   // anchored to the unfiltered bar: no jumping
-            metrics = ControlsLayout.Union(metrics, ControlsLayout.Baseline(UI.screenWidth, Prefs.ShowWeaponsUnderPortraitMode != ShowWeaponsUnderPortraitMode.Never));
-            ChipWidths(out float chipsWidth);
-            Vector2 resetSize, filtersSize, emptySize;
-            using (new TextBlock(GameFont.Small))
-            {
-                resetSize = Text.CalcSize(reset);
-                filtersSize = Text.CalcSize(filters);
-                emptySize = Text.CalcSize(noMatches);
-            }
+            RightColumn.Measure(out float top, out float bottom);
+            UpdateChipLabels();
             EnsureAdvancedLabels(criteria);
-            float stripWidth = chipsWidth + MeasureAdvanced(criteria, resetSize.x);
-            float emptyWidth = emptySize.x + ControlsLayout.Gap * 3f + resetSize.x + 24f;
-            placement = ControlsLayout.Compute(UI.screenWidth, UI.screenHeight, metrics, empty, stripWidth, filtersSize.x + 24f, emptyWidth,
-                searchOpen || criteria.HasQuery);
+            float filtersWidth;
+            using (new TextBlock(GameFont.Small))
+                filtersWidth = Text.CalcSize(filters).x + 24f;
+            placement = ControlsLayout.Compute(UI.screenWidth, UI.screenHeight, top, bottom, ViewState.AnythingSet, empty, filtersWidth, wasCompact);
+            if (placement.Visible)
+                wasCompact = placement.Compact;
             if (!barShown)
                 placement.Visible = false;
-            float x = placement.Strip.x, y = placement.Strip.y, h = placement.Strip.height;
-            for (int i = 0; i < 4; i++)
+            PlaceControls(criteria);
+        }
+
+        private static readonly Rect None = new Rect(0f, 0f, 0f, 0f);
+
+        /// <summary>Rects of every control from the placement; the ones that do not exist now (a compact panel, no skill chosen) are zero-width.</summary>
+        private void PlaceControls(Criteria c)
+        {
+            if (placement.Compact)
             {
-                chipRects[i] = new Rect(x, y, chipWidths[i], h);
-                x += chipWidths[i] + ControlsLayout.Gap;
-            }
-            x += ControlsLayout.Gap;   // a little air between the chips and the advanced controls
-            if (placement.StripCompact)
-            {
-                // Folded into the Filters button: none of the unfolded controls exists this event.
-                for (int i = 0; i < 4; i++)
-                    chipRects[i] = new Rect(x, y, 0f, h);
-                skillRect = levelRect = sortRect = dirRect = stripResetRect = new Rect(x, y, 0f, h);
+                for (int i = 0; i < ChipCount; i++)
+                    chipRects[i] = None;
+                skillRect = levelRect = sortRect = dirRect = resetRect = None;
             }
             else
             {
-                skillRect = Place(ref x, y, h, skillWidth);
-                levelRect = Place(ref x, y, h, levelWidth);
-                sortRect = Place(ref x, y, h, sortWidth);
-                dirRect = Place(ref x, y, h, dirWidth);
-                stripResetRect = Place(ref x, y, h, resetButtonWidth);
+                chipRects[0] = placement.Row(1);
+                chipRects[1] = placement.Cell(2, 0);
+                chipRects[2] = placement.Cell(2, 1);
+                chipRects[3] = placement.Cell(3, 0);
+                chipRects[4] = placement.Cell(3, 1);
+                bool levelShown = c.Skill != null, dirShown = c.EffectiveSort != SortKey.Vanilla;
+                skillRect = levelShown ? placement.Cell(4, 0) : placement.Row(4);
+                levelRect = levelShown ? placement.Cell(4, 1) : None;
+                sortRect = dirShown ? placement.Cell(5, 0) : placement.Row(5);
+                dirRect = dirShown ? placement.Cell(5, 1) : None;
+                resetRect = placement.ResetRow >= 0 ? placement.Row(placement.ResetRow) : None;
             }
-            resetRect = new Rect(placement.Empty.xMax - resetSize.x - 16f, placement.Empty.y, resetSize.x + 16f, placement.Empty.height);
+            emptyRect = placement.EmptyRow >= 0 ? placement.Row(placement.EmptyRow) : None;
         }
 
-        /// <summary>The next strip item, or an empty rect when its width is zero (not shown).</summary>
-        private static Rect Place(ref float x, float y, float h, float width)
-        {
-            if (width <= 0f)
-                return new Rect(x, y, 0f, h);
-            var r = new Rect(x, y, width, h);
-            x += width + ControlsLayout.Gap;
-            return r;
-        }
-
-        private readonly float[] chipWidths = new float[4];
-        private readonly Rect[] chipRects = new Rect[4];
-        private Rect resetRect;
-
-        /// <summary>Fills the four chips' widths and returns the width of the whole row (counts refresh the labels).</summary>
-        private void ChipWidths(out float total)
+        /// <summary>The chips' texts, with the live counts (translated again only when a count changes).</summary>
+        private void UpdateChipLabels()
         {
             RosterCounts counts = BarAdapter.Counts;
-            int[] values = { counts.All, counts.Drafted, counts.Injured, counts.Idle };
-            total = 0f;
-            using (new TextBlock(GameFont.Small))
+            int[] values = { counts.All, counts.Drafted, counts.Injured, counts.Idle, counts.Inspired };
+            for (int i = 0; i < ChipCount; i++)
             {
-                for (int i = 0; i < 4; i++)
-                {
-                    if (chipLabelCounts[i] != values[i])
-                    {
-                        chipLabelCounts[i] = values[i];
-                        chipLabels[i] = "ColonyCommand_ChipWithCount".Translate(chipNames[i], values[i]);
-                    }
-                    chipWidths[i] = Mathf.Max(44f, Text.CalcSize(chipLabels[i]).x + 12f);
-                    total += chipWidths[i] + (i > 0 ? ControlsLayout.Gap : 0f);
-                }
+                if (chipLabelCounts[i] == values[i])
+                    continue;
+                chipLabelCounts[i] = values[i];
+                chipLabels[i] = "ColonyCommand_ChipWithCount".Translate(chipNames[i], values[i]);
             }
         }
 
@@ -294,8 +284,8 @@ namespace ColonyCommand
             if (labelVersion == ViewState.Version && skillLabel != null)
                 return;
             labelVersion = ViewState.Version;
-            // Short on purpose: at the 800 px minimum the whole row has to fit beside the alert column. The skill is named alone,
-            // the level shows as "10+"; the tooltips say what each button is.
+            // Short on purpose: two buttons share a row of 186 px. The skill is named alone, the level shows as "10+"; the
+            // tooltips say what each button is.
             skillLabel = c.Skill == null ? "ColonyCommand_SkillButton".Translate() : c.Skill.skillLabel.CapitalizeFirst();
             levelLabel = c.MinLevel == ViewState.AnyLevel ? "ColonyCommand_LevelButton".Translate() : "ColonyCommand_LevelValue".Translate(c.MinLevel);
             SortKey sort = c.EffectiveSort;
@@ -312,64 +302,51 @@ namespace ColonyCommand
             dirTip = "ColonyCommand_DirTip".Translate();
         }
 
-        /// <summary>Widths of the advanced controls for these criteria (0 = not shown) and the room they take in the row.</summary>
-        private float MeasureAdvanced(Criteria c, float resetTextWidth)
-        {
-            float Width(string label, float min, float max) => Mathf.Clamp(Text.CalcSize(label).x + 12f, min, max);
-            using (new TextBlock(GameFont.Small))
-            {
-                skillWidth = Width(skillLabel, 56f, 112f);
-                levelWidth = c.Skill != null ? Width(levelLabel, 48f, 88f) : 0f;
-                sortWidth = Width(sortLabel, 64f, 112f);
-                dirWidth = c.EffectiveSort != SortKey.Vanilla ? Width(dirLabel, 56f, 88f) : 0f;
-                resetButtonWidth = ViewState.AnythingSet ? resetTextWidth + 12f : 0f;
-            }
-            float total = ControlsLayout.Gap;
-            foreach (float w in new[] { skillWidth, levelWidth, sortWidth, dirWidth, resetButtonWidth })
-            {
-                if (w > 0f)
-                    total += w + ControlsLayout.Gap;
-            }
-            return total;
-        }
-
         // ---------------------------------------------------------------------------------------- drawing
 
-        private void DrawStrip()
+        private void DrawControls()
         {
-            Rect strip = placement.Strip;
             Criteria c = ViewState.Snapshot;
-            if (placement.StripCompact)
+            if (placement.Compact)
             {
-                if (Widgets.ButtonText(strip, filters))
+                if (Look.Button(placement.Filters, filters, filtersTip, ViewState.AnythingSet))
                     Find.WindowStack.Add(new FloatMenu(FilterMenu(c)));
-                return;
             }
-            for (int i = 0; i < 4; i++)
+            else
             {
-                if (DrawChip(chipRects[i], chipLabels[i], IsActive(i, c), chipTips[i]))
-                    Click(i, c);
+                for (int i = 0; i < ChipCount; i++)
+                {
+                    if (Look.Button(chipRects[i], chipLabels[i], chipTips[i], IsActive(i, c)))
+                        Click(i, c);
+                }
+                if (Look.Button(skillRect, skillLabel, skillTip, c.Skill != null))
+                    OpenSkillMenu();
+                if (levelRect.width > 0f && Look.Button(levelRect, levelLabel, levelTip, c.HasSkillCriterion))
+                    OpenLevelMenu();
+                if (Look.Button(sortRect, sortLabel, sortTip, c.EffectiveSort != SortKey.Vanilla))
+                    OpenSortMenu();
+                if (dirRect.width > 0f && Look.Button(dirRect, dirLabel, dirTip, false))
+                    ViewState.Descending = !c.Descending;
+                if (resetRect.width > 0f && Look.Button(resetRect, reset, resetTip, false))
+                    ResetAll();
             }
-            if (DrawButton(skillRect, skillLabel, skillTip, c.Skill != null))
-                OpenSkillMenu();
-            if (levelRect.width > 0f && DrawButton(levelRect, levelLabel, levelTip, c.HasSkillCriterion))
-                OpenLevelMenu();
-            if (DrawButton(sortRect, sortLabel, sortTip, c.EffectiveSort != SortKey.Vanilla))
-                OpenSortMenu();
-            if (dirRect.width > 0f && DrawButton(dirRect, dirLabel, dirTip, false))
-                ViewState.Descending = !c.Descending;
-            if (stripResetRect.width > 0f && DrawButton(stripResetRect, reset, resetTip, false))
-                ResetAll();
+            if (emptyRect.width > 0f)
+                Look.DrawLabel(emptyRect, noMatches, Look.Warning);
         }
 
-        /// <summary>A strip button in the same selectable-option look as the chips; <paramref name="active"/> marks a set criterion.</summary>
-        private static bool DrawButton(Rect rect, string label, string tip, bool active)
+        /// <summary>
+        /// A click that lands on the panel between its controls must not fall through to the map beneath (it would deselect or
+        /// select a colonist, or, with a right click, give the selected colonist an order). A window over the panel, such as
+        /// a dropdown, keeps its clicks; the search field is a window of ours and gets its own.
+        /// </summary>
+        private void AbsorbPanelClicks()
         {
-            Widgets.DrawOptionBackground(rect, active);
-            using (new TextBlock(GameFont.Small, TextAnchor.MiddleCenter))
-                Widgets.Label(rect, label.Truncate(rect.width - 8f));
-            TooltipHandler.TipRegion(rect, tip);
-            return Widgets.ButtonInvisible(rect);
+            Event e = Event.current;
+            if (e.type != EventType.MouseDown && e.type != EventType.MouseUp)
+                return;
+            Vector2 mouse = e.mousePosition;
+            if (placement.Panel.Contains(mouse) && !placement.Search.Contains(mouse) && Find.WindowStack.GetWindowAt(UI.GUIToScreenPoint(mouse)) == null)
+                e.Use();
         }
 
         // ------------------------------------------------------------------------------------------- menus
@@ -428,16 +405,21 @@ namespace ColonyCommand
             ViewState.Descending = key == SortKey.Mood || key == SortKey.Skill;
         }
 
-        private static bool IsActive(int chip, Criteria c)
+        /// <summary>The status each chip stands for (chip 0, All, is none).</summary>
+        private static StatusFilter StatusOf(int chip)
         {
             switch (chip)
             {
-                case 0: return c.Status == StatusFilter.None && !c.HasSkillCriterion;
-                case 1: return c.Status == StatusFilter.Drafted;
-                case 2: return c.Status == StatusFilter.Injured;
-                default: return c.Status == StatusFilter.Idle;
+                case 1: return StatusFilter.Drafted;
+                case 2: return StatusFilter.Injured;
+                case 3: return StatusFilter.Idle;
+                case 4: return StatusFilter.Inspired;
+                default: return StatusFilter.None;
             }
         }
+
+        private static bool IsActive(int chip, Criteria c) =>
+            chip == 0 ? c.Status == StatusFilter.None && !c.HasSkillCriterion : c.Status == StatusOf(chip);
 
         /// <summary>All clears the status and the skill criterion (the search stays); another chip toggles itself, one at a time.</summary>
         private static void Click(int chip, Criteria c)
@@ -447,14 +429,14 @@ namespace ColonyCommand
                 ViewState.ClearStatusAndSkill();
                 return;
             }
-            StatusFilter wanted = chip == 1 ? StatusFilter.Drafted : chip == 2 ? StatusFilter.Injured : StatusFilter.Idle;
+            StatusFilter wanted = StatusOf(chip);
             ViewState.Status = c.Status == wanted ? StatusFilter.None : wanted;
         }
 
         private List<FloatMenuOption> FilterMenu(Criteria c)
         {
             var options = new List<FloatMenuOption>();
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < ChipCount; i++)
             {
                 int chip = i;
                 options.Add(new FloatMenuOption(chipLabels[i], () => Click(chip, ViewState.Snapshot)));
@@ -469,46 +451,6 @@ namespace ColonyCommand
             if (ViewState.AnythingSet)
                 options.Add(new FloatMenuOption(reset, ResetAll));
             return options;
-        }
-
-        private static bool DrawChip(Rect rect, string label, bool active, string tip)
-        {
-            Widgets.DrawOptionBackground(rect, active);
-            Widgets.Label(rect, label);
-            TooltipHandler.TipRegion(rect, tip);
-            return Widgets.ButtonInvisible(rect);
-        }
-
-        /// <summary>The compact stand-in for the field: opens it (and focuses it), or closes it again while it holds nothing.</summary>
-        private void DrawSearchIcon()
-        {
-            Rect icon = placement.SearchIcon;
-            if (placement.SearchFieldShown)
-                Widgets.DrawHighlightSelected(icon);
-            TooltipHandler.TipRegion(icon, placeholder);
-            if (!Widgets.ButtonImage(icon, TexButton.Search))
-                return;
-            if (!placement.SearchFieldShown)
-            {
-                searchOpen = true;
-                pendingFocus = true;
-            }
-            else if (!search.filter.Active)
-            {
-                searchOpen = false;
-                search.Unfocus();
-            }
-        }
-
-        private void DrawEmptyState()
-        {
-            Rect line = placement.Empty;
-            GUI.color = ColorLibrary.RedReadable;
-            Widgets.Label(new Rect(line.x, line.y, resetRect.x - ControlsLayout.Gap - line.x, line.height), noMatches);
-            GUI.color = Color.white;
-            TooltipHandler.TipRegion(resetRect, resetTip);
-            if (Widgets.ButtonText(resetRect, reset))
-                ResetAll();
         }
 
         /// <summary>Back to the vanilla bar: the state is cleared and the field follows on the next event.</summary>

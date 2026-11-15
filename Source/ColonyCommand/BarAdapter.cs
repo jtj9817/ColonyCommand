@@ -32,8 +32,6 @@ namespace ColonyCommand
         private static int appliedVersion, shown;
         private static RosterCounts counts;
         private static float nextRefresh;
-        private static BarMetrics footprint;
-        private static readonly List<Vector2> footprintLocs = new List<Vector2>();
 
         /// <summary>
         /// How often the view and the chip counts are re-evaluated against the live game (real time): a colonist drafted or
@@ -49,12 +47,6 @@ namespace ColonyCommand
         /// skill criteria). Default (all zero) while no view has been built.
         /// </summary>
         public static RosterCounts Counts => counts;
-
-        /// <summary>
-        /// The footprint of the bar as vanilla lays it out unfiltered (measured from the vanilla roster at each build), while a
-        /// view is written; default otherwise. The controls anchor to it so they do not move while the user filters.
-        /// </summary>
-        public static BarMetrics VanillaFootprint => footprint;
 
         /// <summary>Colonists (pawn entries) the bar shows right now: with nothing active, the eligible ones. 0 behind an empty state.</summary>
         public static int Shown => shown;
@@ -116,7 +108,6 @@ namespace ColonyCommand
                 if (applied)
                 {
                     applied = false;
-                    footprint = default;
                     bar.MarkColonistsDirty();   // vanilla rebuilds the roster and the layout on its next read
                     refreshDue = true;
                 }
@@ -137,7 +128,6 @@ namespace ColonyCommand
             if (upToDate && IsView(entries))
                 return;
             drawLocsFinder ??= new ColonistBarDrawLocsFinder();
-            MeasureVanillaFootprint(entries);   // while the list is still vanilla's
             int groups = RosterView.Build(entries, criteria, view, out counts);
             shown = 0;
             for (int i = 0; i < view.Count; i++)
@@ -154,15 +144,6 @@ namespace ColonyCommand
             scaleField.SetValue(bar, scale);
             applied = true;
             appliedVersion = version;
-        }
-
-        /// <summary>Lays the vanilla entries out into scratch space and keeps what the unfiltered bar would occupy.</summary>
-        private static void MeasureVanillaFootprint(List<ColonistBar.Entry> vanilla)
-        {
-            int groups = vanilla.Count == 0 ? 0 : vanilla[vanilla.Count - 1].group + 1;
-            drawLocsFinder.CalculateDrawLocs(footprintLocs, out float scale, groups);   // reads the bar's current list: vanilla's
-            footprint = ControlsLayout.Measure(footprintLocs, ColonistBar.BaseSize * scale, scale, groups);
-            footprintLocs.Clear();
         }
 
         /// <summary>
@@ -200,7 +181,6 @@ namespace ColonyCommand
             applied = false;
             counts = default;
             shown = 0;
-            footprint = default;
             view.Clear();
             CC.Error(error);
             try

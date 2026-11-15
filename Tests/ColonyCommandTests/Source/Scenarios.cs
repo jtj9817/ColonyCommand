@@ -32,6 +32,7 @@ namespace ColonyCommandTests
             ("Search field", SearchField),
             ("Search Enter", SearchEnter),
             ("Chip clicks", ChipClicks),
+            ("Inspired filter", InspiredFilter),
             ("Empty state", EmptyState),
             ("Enter across maps", EnterAcrossMaps),
             ("Controls placement", ControlsPlacement),

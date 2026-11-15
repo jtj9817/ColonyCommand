@@ -36,8 +36,11 @@ HARMONY_DIR="${HARMONY_DIR:-$RW_DIR/../../workshop/content/294100/2009463077}"
 # Test-instance tuning (autotest loop; read by autotest.py — keep both in step)
 MOD_MAP_SIZE="${MOD_MAP_SIZE:-200}"        # quicktest map size (empty: vanilla 250)
 MOD_PKG="${MOD_PKG:-$REPO/dist/$MOD_NAME}" # packaged release copy for autotest.py pkg-run (tools/package.sh)
-MOD_SCREEN="${MOD_SCREEN:-800x500}"        # test instance window (software rendering: smaller is cheaper). Vanilla hides the
-                                           # colonist bar below 800x500 (ColonistBar.Visible), so this repo can't go smaller
+MOD_SCREEN="${MOD_SCREEN:-800x800}"        # test instance window (software rendering: smaller is cheaper). Vanilla hides the
+                                           # colonist bar below 800x500 (ColonistBar.Visible); this repo needs 800 px of height: the
+                                           # whole filter panel (right column, under the Learning Helper) needs ~290 px, above the
+                                           # alerts (~140 px with a dozen colonists) and the weather/letters block, which starts
+                                           # ~285 px above the bottom edge
 MOD_RENDER_THREADS="${MOD_RENDER_THREADS:-4}"  # llvmpipe threads, LP_NUM_THREADS (empty: one per core)
 # Test-only packageIds loaded after the mod (comma-separated); a change restarts cold. Convention: a repo-local test mod
 # Tests/<MOD_NAME>Tests with packageId <MOD_ID>tests is loaded by default (Harmony allowed there; the shipped assembly

@@ -1,180 +1,118 @@
-using System.Collections.Generic;
-using RimWorld;
 using UnityEngine;
-using Verse;
 
 namespace ColonyCommand
 {
-    /// <summary>What the layout needs to know about the bar's portraits, in screen units.</summary>
-    public struct BarMetrics
-    {
-        /// <summary>The bar draws at least one portrait.</summary>
-        public bool HasPortraits;
-        /// <summary>Horizontal extent of the portraits, group frames included.</summary>
-        public float MinX, MaxX;
-        /// <summary>Everything the bar draws under its portraits (labels, group frame, a weapon icon) ends above this y.</summary>
-        public float BottomY;
-        /// <summary>Height of one portrait (<c>ColonistBar.Size.y</c>).</summary>
-        public float PortraitHeight;
-    }
-
-    /// <summary>Where the controls go this event. Rects are in screen units (the bar's own coordinates).</summary>
+    /// <summary>
+    /// Where the controls go this event. Rects are in screen units. The panel is one column at the right edge of the screen,
+    /// as wide as vanilla's Learning Helper and right under it. It is laid out in rows of <see cref="ControlsLayout.RowHeight"/>:
+    /// row 0 is the search field, 1 the All chip, 2 and 3 the other four chips in two columns, 4 the Skill (and Level) buttons,
+    /// 5 Sort (and its direction), then Reset (only when something is set) and the empty-state line (only with no results).
+    /// <see cref="Compact"/> is the fallback for a column with too little height: row 0 holds the search field and a Filters
+    /// button (the same actions in a menu), and the empty-state line is row 1.
+    /// </summary>
     public struct Placement
     {
-        /// <summary>False below 800x500, with the bar hidden: nothing is drawn and nothing takes input.</summary>
+        /// <summary>False below 800x500 (the colonist bar is hidden there) or with the bar switched off: nothing is drawn and nothing takes input.</summary>
         public bool Visible;
-        /// <summary>
-        /// The search field (also the window's rect), when <see cref="SearchFieldShown"/>: right of the portrait area when there
-        /// is room, else (compact) in a row under the chip strip.
-        /// </summary>
+        /// <summary>Not enough height below the Learning Helper for the whole panel: a single row, search field plus Filters button.</summary>
+        public bool Compact;
+        /// <summary>The panel's background; also what swallows a click that lands between the controls.</summary>
+        public Rect Panel;
+        /// <summary>The search field (also the window's rect). Shown whenever <see cref="Visible"/>.</summary>
         public Rect Search;
-        public bool SearchFieldShown;
-        /// <summary>There is no room for the field beside the portraits (the alerts are at the right): a search icon stands in for it.</summary>
-        public bool SearchCompact;
-        public Rect SearchIcon;
-        /// <summary>The "No matching colonists" line, in the place of the empty bar. Meaningful when <see cref="ShowEmpty"/>.</summary>
-        public Rect Empty;
-        public bool ShowEmpty;
-        /// <summary>The row under the bar: the chips, or one Filters button when <see cref="StripCompact"/>.</summary>
-        public Rect Strip;
-        public bool StripCompact;
+        /// <summary>The Filters button of the compact layout (zero-sized otherwise).</summary>
+        public Rect Filters;
+        /// <summary>Top-left of row 0.</summary>
+        public float ContentX, ContentY;
+        /// <summary>Row of the Reset button and of the empty-state line, or -1 when it is not shown.</summary>
+        public int ResetRow, EmptyRow;
+
+        /// <summary>The whole width of the panel's content in this row.</summary>
+        public Rect Row(int row) => new Rect(ContentX, ContentY + row * (ControlsLayout.RowHeight + ControlsLayout.RowGap), ControlsLayout.InnerWidth, ControlsLayout.RowHeight);
+
+        /// <summary>The left (0) or right (1) half of a row.</summary>
+        public Rect Cell(int row, int column)
+        {
+            Rect r = Row(row);
+            float w = (r.width - ControlsLayout.Gap) / 2f;
+            return new Rect(r.x + column * (w + ControlsLayout.Gap), r.y, w, r.height);
+        }
     }
 
     /// <summary>
-    /// Pure geometry, so it can be asserted with synthetic bars: the search field sits right of the portraits when there is
-    /// room, the chip row under everything the bar draws, and nothing overlaps a portrait, the vanilla alert column
-    /// (154 px wide at the right edge, growing up to the top of the screen) or the screen's edge. The vanilla bar is at most
-    /// <c>screenWidth - 520</c> wide and centered (260 px free on each side) and is hidden below 800x500; with the alerts
-    /// taking 154 of those 260 px, a full bar leaves only about 90 px for the field, so the field collapses to a search icon
-    /// whose opened field goes in a row under the chips (spec section 2, responsive behavior).
+    /// Pure geometry, so it can be asserted over screen sizes and free heights. Vanilla's right edge is crowded: the Learning
+    /// Helper at the top (200 px wide, 8 px from the edge, as tall as its content), and from the bottom up the weather and
+    /// date, the letters and the alerts (154 px wide). The panel sits in the gap: it starts under the Learning Helper
+    /// (<c>top</c>) and must end above the alerts (<c>bottom</c>), or whatever is below it would take its clicks. It never
+    /// reaches the colonist bar: the bar is at most <c>screenWidth - 520</c> wide and centered, so it ends 260 px short of
+    /// the right edge, and the panel starts 208 px short of it.
     /// </summary>
     public static class ControlsLayout
     {
-        /// <summary>The bar's top margin (<c>ColonistBarDrawLocsFinder.MarginTop</c>).</summary>
-        public const float RowTop = 21f;
-        public const float ControlHeight = 24f;
+        public const float PanelWidth = 200f;
+        /// <summary>The gap to the screen's right edge: the Learning Helper's (<c>LearningReadout.OuterMargin</c>).</summary>
+        public const float RightMargin = 8f;
+        public const float Pad = 7f;
+        public const float InnerWidth = PanelWidth - 2f * Pad;
+        public const float RowHeight = 24f;
+        public const float RowGap = 4f;
         public const float Gap = 4f;
-        public const float SideMargin = 8f;
-        /// <summary>The narrowest bar the layout is built around: the controls never come closer than this to the middle.</summary>
-        public const float MinHalfBar = 140f;
-        public const float SearchWidth = 220f;
-        /// <summary>Narrower than this the placeholder and the typed text no longer fit: the field collapses to an icon.</summary>
-        public const float MinInlineSearchWidth = 170f;
-        public const float IconSize = 24f;
-        /// <summary>The vanilla alert column (<c>AlertsReadout</c>): 154 px at the right edge.</summary>
-        public const float AlertsWidth = 154f;
+        /// <summary>The rows of the whole panel when nothing is set: search, All, two chip rows, Skill, Sort.</summary>
+        public const int BaseRows = 6;
+        /// <summary>With the Reset row and the empty-state line as well: the tallest the panel gets.</summary>
+        public const int MaxRows = BaseRows + 2;
+        /// <summary>Free height a compact panel must regain before it goes back to the whole panel (no flicker when an alert comes and goes).</summary>
+        public const float Hysteresis = 28f;
         public const float MinScreenWidth = 800f, MinScreenHeight = 500f;
+        /// <summary>The narrowest the Filters button of the compact layout and the search field beside it may be.</summary>
+        public const float MinFiltersWidth = 60f, MinCompactSearchWidth = 90f;
 
-        public static Placement Compute(float screenWidth, float screenHeight, BarMetrics bar, bool showEmpty,
-            float stripWidth, float filtersButtonWidth, float emptyWidth, bool searchOpen = false)
+        /// <summary>Height of a panel with this many rows.</summary>
+        public static float HeightOfRows(int rows) => 2f * Pad + rows * RowHeight + (rows - 1) * RowGap;
+
+        /// <summary>
+        /// <paramref name="top"/> and <paramref name="bottom"/> bound the free part of the right column (below the Learning
+        /// Helper, above the alerts). Whether the panel is compact is decided from its tallest form, not from the rows shown
+        /// now, so that Reset and the empty-state line appearing never fold it. <paramref name="wasCompact"/> adds hysteresis.
+        /// </summary>
+        public static Placement Compute(float screenWidth, float screenHeight, float top, float bottom, bool showReset, bool showEmpty,
+            float filtersWidth, bool wasCompact = false)
         {
-            var p = new Placement { Visible = screenWidth >= MinScreenWidth && screenHeight >= MinScreenHeight };
+            var p = new Placement { Visible = screenWidth >= MinScreenWidth && screenHeight >= MinScreenHeight, ResetRow = -1, EmptyRow = -1 };
             if (!p.Visible)
                 return p;
-            float center = screenWidth / 2f;
-            float rightLimit = screenWidth - AlertsWidth - SideMargin;   // nothing of ours goes under the alert column
-
-            // Search: right of the portrait area, level with the first row.
-            float anchor = center + MinHalfBar;
-            if (bar.HasPortraits)
-                anchor = Mathf.Max(anchor, bar.MaxX);
-            float x = anchor + SideMargin;
-            float span = rightLimit - x;
-            float y = RowTop;   // level with the top of the first row, whatever the portrait size: it must not move with the view
-            p.SearchCompact = span < MinInlineSearchWidth;
-            if (!p.SearchCompact)
+            p.Compact = bottom - top < HeightOfRows(MaxRows) + (wasCompact ? Hysteresis : 0f);
+            int rows;
+            if (p.Compact)
             {
-                p.Search = new Rect(x, y, Mathf.Min(SearchWidth, span), ControlHeight);
-                p.SearchFieldShown = true;
+                rows = showEmpty ? 2 : 1;
+                p.EmptyRow = showEmpty ? 1 : -1;
             }
             else
             {
-                p.SearchIcon = new Rect(Mathf.Min(x, rightLimit - IconSize), y, IconSize, ControlHeight);
-                p.SearchFieldShown = searchOpen;
+                rows = BaseRows;
+                if (showReset)
+                    p.ResetRow = rows++;
+                if (showEmpty)
+                    p.EmptyRow = rows++;
             }
-
-            // Empty state: in the place of the portraits, in the top row.
-            p.ShowEmpty = showEmpty;
-            if (showEmpty)
+            float height = HeightOfRows(rows);
+            float x = screenWidth - RightMargin - PanelWidth;
+            float y = Mathf.Max(0f, Mathf.Min(top, screenHeight - height));   // on screen however little room there is
+            p.Panel = new Rect(x, y, PanelWidth, height);
+            p.ContentX = x + Pad;
+            p.ContentY = y + Pad;
+            if (p.Compact)
             {
-                float w = Mathf.Min(emptyWidth, rightLimit - SideMargin);
-                p.Empty = new Rect(Mathf.Clamp(center - w / 2f, SideMargin, rightLimit - w), RowTop, w, ControlHeight);
+                float f = Mathf.Clamp(filtersWidth, MinFiltersWidth, InnerWidth - Gap - MinCompactSearchWidth);
+                p.Search = new Rect(p.ContentX, p.ContentY, InnerWidth - Gap - f, RowHeight);
+                p.Filters = new Rect(p.Search.xMax + Gap, p.ContentY, f, RowHeight);
             }
-
-            // Strip: under everything the bar draws (the footprint of the unfiltered bar, so it stays put while filtering).
-            float top = bar.HasPortraits ? bar.BottomY : RowTop + ControlHeight;
-            p.StripCompact = stripWidth > rightLimit - SideMargin;
-            float sw = p.StripCompact ? Mathf.Min(filtersButtonWidth, rightLimit - SideMargin) : stripWidth;
-            p.Strip = new Rect(Mathf.Clamp(center - sw / 2f, SideMargin, rightLimit - sw), top + Gap, sw, ControlHeight);
-            if (p.SearchCompact && searchOpen)   // the opened field: a row of its own under the chips
-                p.Search = new Rect(p.Strip.x, p.Strip.yMax + Gap, Mathf.Min(SearchWidth, rightLimit - p.Strip.x), ControlHeight);
+            else
+            {
+                p.Search = p.Row(0);
+            }
             return p;
-        }
-
-        /// <summary>
-        /// The bigger of two footprints. The controls are anchored to the bar as the game would draw it unfiltered, not to the
-        /// current view: a filter that leaves fewer rows must not make the chips jump out from under the cursor.
-        /// </summary>
-        public static BarMetrics Union(BarMetrics a, BarMetrics b)
-        {
-            if (!a.HasPortraits)
-                return b;
-            if (!b.HasPortraits)
-                return a;
-            return new BarMetrics
-            {
-                HasPortraits = true,
-                MinX = Mathf.Min(a.MinX, b.MinX),
-                MaxX = Mathf.Max(a.MaxX, b.MaxX),
-                BottomY = Mathf.Max(a.BottomY, b.BottomY),
-                PortraitHeight = Mathf.Max(a.PortraitHeight, b.PortraitHeight),
-            };
-        }
-
-        /// <summary>
-        /// The footprint of the tallest bar there can be in one row (portraits at scale 1 plus a weapon icon), as wide as the
-        /// narrowest bar the layout is built around. The controls never sit higher than under this: with fewer colonists the
-        /// portraits grow, and a row that moved with the portrait size would jump away from the cursor.
-        /// </summary>
-        public static BarMetrics Baseline(float screenWidth, bool weaponsShown)
-        {
-            float center = screenWidth / 2f;
-            return new BarMetrics
-            {
-                HasPortraits = true,
-                MinX = center - MinHalfBar,
-                MaxX = center + MinHalfBar,
-                BottomY = RowTop + (weaponsShown ? 48f * 1.95f : 48f + 32f),
-                PortraitHeight = 48f,
-            };
-        }
-
-        /// <summary>The footprint of the bar as drawn right now (draw locations, size, scale, group count), without recaching it.</summary>
-        public static BarMetrics Measure(ColonistBar bar, int groupCount) => Measure(bar.DrawLocs, bar.Size, bar.Scale, groupCount);
-
-        /// <summary>The footprint of a layout: draw locations of the portraits, their size and scale, and how many groups there are.</summary>
-        public static BarMetrics Measure(List<Vector2> locs, Vector2 size, float scale, int groupCount)
-        {
-            var m = new BarMetrics { HasPortraits = locs.Count > 0, PortraitHeight = size.y };
-            if (!m.HasPortraits)
-                return m;
-            float minX = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
-            for (int i = 0; i < locs.Count; i++)
-            {
-                minX = Mathf.Min(minX, locs[i].x);
-                maxX = Mathf.Max(maxX, locs[i].x + size.x);
-                maxY = Mathf.Max(maxY, locs[i].y);
-            }
-            float frame = groupCount >= 2 ? 12f * scale : 0f;   // the group frame grows 12 * scale around its portraits
-            m.MinX = minX - frame;
-            m.MaxX = maxX + frame;
-            // Under a portrait: its name label (at least about 20 px of text), then possibly the group frame; a weapon icon hangs
-            // at 1.05 * the portrait height and is 0.75 of it.
-            float below = Mathf.Max(20f, 32f * scale, frame);
-            m.BottomY = maxY + size.y + below;
-            if (Prefs.ShowWeaponsUnderPortraitMode != ShowWeaponsUnderPortraitMode.Never)
-                m.BottomY = Mathf.Max(m.BottomY, maxY + size.y * 1.95f);
-            return m;
         }
     }
 }

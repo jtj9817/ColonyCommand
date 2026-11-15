@@ -59,8 +59,8 @@ HARMONY_DIR = Path(os.environ.get("HARMONY_DIR", RW_DIR / "../../workshop/conten
 MAP_SIZE = os.environ.get("MOD_MAP_SIZE", "200")
 # The instance renders in software (llvmpipe): window size, and llvmpipe's thread count (LP_NUM_THREADS; empty: one
 # per core). At 1280x720 with every core it used ~1800% CPU; 640x360 with 4 threads ran as fast at ~400% (2026-10-20).
-# This repo: 800x500, since vanilla hides the colonist bar below that (ColonistBar.Visible); same default as env.sh.
-SCREEN_W, SCREEN_H = (int(v) for v in os.environ.get("MOD_SCREEN", "800x500").split("x"))
+# This repo: 800x800 (vanilla hides the colonist bar below 800x500, and the whole filter panel needs the extra height); same default as env.sh.
+SCREEN_W, SCREEN_H = (int(v) for v in os.environ.get("MOD_SCREEN", "800x800").split("x"))
 RENDER_THREADS = os.environ.get("MOD_RENDER_THREADS", "4")
 RW_EXPECTED_VERSION = "1.6."
 

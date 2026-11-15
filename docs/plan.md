@@ -74,13 +74,40 @@ agreed with the user), never patched with Harmony.
   constructor as first planned — `LoadAllPlayData` (which creates the `Mod` classes) is queued with
   `doAsynchronously: true`, a loader thread where Unity objects cannot be created, whereas `CallAll` for static
   constructors is queued synchronously (`Root.cs`).
-- Placement (built, `ControlsLayout`, proven Phase 3): the window's rect is **exactly the search field**, so it never covers a
-  portrait; the chip row and the empty-state line are drawn in screen space from `ExtraOnGUI`. Everything is placed from the
-  bar's own lists on every event: search field right of the portraits (level with the first row) when at least 170 px are free
-  before the alert column (`screenWidth - 154 - 8`), otherwise a search icon with the opened field in a row under the chips;
-  chips under everything the bar draws, anchored to the **unfiltered** footprint (`BarAdapter.VanillaFootprint`, measured from
-  the vanilla layout at each build) and a one-row baseline so they do not move while filtering; hidden below 800x500, with the
-  bar off (`showColonistBar`) or the tile picker up.
+- Placement (Phase 7, supersedes the Phase 3 layout and spec §2's "right of the portrait area"; user request 2026-11-15): one
+  **panel in the right column**, 200 px wide (the Learning Helper's `ReadoutWidth`) at `screenWidth - 208` (its x), starting
+  4 px under the Learning Helper. The window's rect is still **exactly the search field**; the panel background, the buttons
+  and the empty-state line are drawn in screen space from `ExtraOnGUI` (`ControlsLayout` = pure geometry, `RightColumn` =
+  what vanilla occupies, `Look` = colours and the button). Rows: search · All · Drafted|Injured · Idle|Inspired ·
+  Skill(|Level) · Sort(|direction) · Reset (only when something is set) · "No matching colonists" (only with no results).
+  The panel never reaches the bar: the bar is at most `screenWidth - 520` wide and centred, so it ends 260 px short of the
+  right edge and the panel starts 208 px short of it, so nothing is anchored to the bar any more (the Phase 3
+  `BarAdapter.VanillaFootprint`, `Measure`/`Union`/`Baseline` and the search icon are gone).
+  Verified in the 1.6 decompile: the Learning Helper is `LearningReadout.LearningReadoutOnGUI`, an
+  `ImmediateWindow` with ID 76136312 (stored negated by `WindowStack.ImmediateWindow`) at `(screenWidth - 8 - 200, 8)`, 200 wide,
+  `min(contentHeight + 14, screenHeight / 2)` tall, drawn only while `TutorSystem.AdaptiveTrainingEnabled &&
+  (showLearningHelper || activeConcepts.Count != 0)`; the stack drops an immediate window that was not requested in a
+  repaint, so its presence in `Find.WindowStack` means it is shown, and its public `windowRect` gives the bottom edge **without
+  reflection**. The info pane it opens is 310 px to its left. Below: `AlertsReadout.AlertsReadoutOnGUI` draws a 154 px column
+  from `LetterStack.LastTopY - AlertsHeight` down (both public), and `GlobalControls` puts the letters' base ~285 px above the
+  bottom edge (weather, date, time controls, play settings under it): the panel must end above the alerts or it would sit
+  under their clicks (`AlertsReadoutOnGUI` runs before the window stack). `RightColumn.Measure` reads both once per frame.
+  **Fold:** when the free height (`bottom - top`) is under the tallest panel (8 rows = 234 px) the panel folds to one row, the
+  search field plus a Filters button whose menu holds the same actions; the decision uses the tallest form, not the rows shown
+  (Reset appearing must not fold it under the cursor) and has 28 px of hysteresis (an alert coming and going must not flicker
+  it). At 800x500 only the folded form ever fits, which is why the test window is now 800x720.
+  **Clicks:** `AlertsReadoutOnGUI`, the window stack and `HandleMapClicks` run in that order (`UIRoot_Play.UIRootOnGUI`), so a
+  click on a button is consumed before the map sees it, but one between buttons would fall through (a left click changes the
+  selection, a right click orders the selected colonist). The panel therefore consumes `MouseDown`/`MouseUp` on its background
+  unless a window (a dropdown) is over that point, and leaves the search field's rect to the field.
+  **Look (`Look.cs`, user request: colour-blind friendly yet noticeable):** deep navy panel with a sky-blue edge, orange
+  (`#E69F00`, Okabe-Ito) for the selected choice with dark text and a marker bar (a shape cue that survives grayscale), yellow
+  (`#F0E442`) for the one warning instead of red. Blue/orange/yellow are Okabe-Ito colour-blind-safe hues and selected vs
+  resting also differ in brightness. `tools/palette-check.py` reads the constants and verifies WCAG contrast (text >= 4.5:1,
+  borders and selected-vs-resting >= 3:1) and a CIELAB distance >= 40 between selected and resting under normal vision and
+  protan/deutan/tritan simulation (Machado 2009, severity 1), and that the panel's fill or edge stands out from soil, grass,
+  snow, rock and night backdrops: 96/96 checks.
+  Placeholder: "Search by name" (the spec's "Search colonist by name" no longer fits 186 px; it is the field's tooltip).
 
 ### 1.4 Predicates and values (spec §3.2, §4) — implemented and proven in Phase 2
 
@@ -89,6 +116,7 @@ agreed with the user), never patched with Harmony.
 | Drafted | `!pawn.Dead && pawn.Drafted` | A corpse is never drafted |
 | Injured | `!pawn.Dead && health.hediffSet.HasNaturallyHealingInjury()` — any non-permanent `Hediff_Injury` (Q3) | A scar (permanent) and a non-injury hediff do not count; the dead are never injured (open point 1) |
 | Idle | exactly the bar's idle-icon branch, the last of the chain in `ColonistBarColonistDrawer.DrawIcons`: not dead → not in a mental state → not in a medical bed → not asleep (job, or resting in a caravan) → not fleeing → not attacking → `mindState.IsIdle && GenDate.DaysPassed >= 1` | **No "not drafted" term**: the bar has none; a drafted colonist leaves `lastJobTag == Idle` through the think tree (`DraftedOrder`). The oracle is the bar itself (`IdleProbe`, a test-mod hook on `DrawIcons`/`DrawIcon`): `Status chips` compares predicate and drawn icon for every colonist, with a day-0 control and a real draft |
+| Inspired | `pawn.Inspired` (`!Dead && mindState?.inspirationHandler != null && handler.Inspired`) | Exactly the bar's inspiration icon: `ColonistBarColonistDrawer.DrawIcons` adds `Icon_Inspired` when `colonist.Inspired`, outside the idle chain (an inspired colonist can also be Idle or Drafted). The dead are never inspired, as for the other statuses. Test: `Inspired filter` (10 fixtures, 3 inspired, a real click on the chip); the oracle is the pawn's own handler |
 | Skill ≥ N | the pawn's `SkillRecord.Level` (read from `skills.skills`, never `GetSkill`, which logs an error for a def the pawn lacks); unavailable (-1) when `skills == null`, dead, or `TotallyDisabled` | Unavailable pawns fail any skill criterion (even 0) and sort last. Core-only: `Level` has no aptitude offset |
 | Mood | `pawn.needs?.mood?.CurLevelPercentage`; NaN (unavailable) when dead or no mood need | Sorted last in both directions |
 | Name | `LabelShortCap` is the displayed name (untruncated); match = `LabelShort`, `NameTriple` `First`/`Nick`/`Last` or `NameSingle.Name`, and `ToStringFull`; trimmed `OrdinalIgnoreCase` substring | Name sort compares `LabelShortCap` with `InvariantCultureIgnoreCase` |
@@ -132,7 +160,7 @@ Verdict: **gate passed, no reduction of the feature needed**; Q2 (no Harmony in 
 Facts the runs added:
 
 - `ColonistBar.Visible` is false below 800×500 (`UI.screenWidth/Height`), so nothing about the bar can be tested in the
-  harness's old 640×360 window; this repo's harness defaults to 800×500.
+  harness's old 640×360 window; this repo's harness defaulted to 800×500 and has used 800×800 since Phase 7 (the whole filter panel needs the height).
 - At 800×500 the bar is 280 px wide (`screenWidth − 520`): 3 portraits fit at scale 1, 5 shrink to ~0.77.
 - Real input is testable in the harness through `xdotool` against the private Xvfb (left click selects through
   `Selector.SelectableObjectsUnderMouse` → `ColonistBar.ColonistOrCorpseAt`; the bar's reorder is a **right**-button drag).

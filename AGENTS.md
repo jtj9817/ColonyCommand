@@ -17,7 +17,9 @@ Identity (in `tools/env.sh`): `MOD_NAME=ColonyCommand` (assembly, `Source/` dir,
   the save), no Defs, no mod settings. UI state is memory-only and resets on load.
 - **Never mutate game data.** Not pawns, names, selection, jobs, work settings, or
   `playerSettings.displayOrder` (vanilla drag-reorder writes it — neutralise reorder while a view is active).
-- **Vanilla look.** Reuse vanilla widgets (`QuickSearchWidget`, `Widgets`, `FloatMenu`), textures and colors.
+- **Vanilla widgets, own colours.** Reuse vanilla widgets (`QuickSearchWidget`, `Widgets`, `FloatMenu`) and textures; the panel's colours
+  are the colour-blind-safe palette in `Source/ColonyCommand/Look.cs` (user decision, Phase 7: rerun `python3 -I tools/palette-check.py`
+  after changing one).
 - Predicates decided by the user: Injured = `hediffSet.HasNaturallyHealingInjury()`; Idle = exactly the bar's
   idle-icon condition in `ColonistBarColonistDrawer`.
 
@@ -26,7 +28,7 @@ Identity (in `tools/env.sh`): `MOD_NAME=ColonyCommand` (assembly, `Source/` dir,
 ```mermaid
 flowchart LR
     boot["Bootstrap (MonoBehaviour, DontDestroyOnLoad)<br/>opens the window while Playing; LateUpdate applies the view"] --> adapter
-    win["ColonyCommandWindow (vanilla Window, GameUI layer)<br/>search · chips · skill · sort"] -->|ViewState| adapter
+    win["ColonyCommandWindow (vanilla Window, GameUI layer)<br/>right-column panel under the Learning Helper:<br/>search · chips · skill · sort"] -->|ViewState| adapter
     win -.->|ExtraOnGUI + WindowUpdate: safety net| adapter
     adapter["BarAdapter"] -->|read Entries| bar["Find.ColonistBar<br/>(vanilla)"]
     adapter --> view["RosterView (pure)<br/>name → status → skill → per-group stable sort"]
@@ -74,7 +76,9 @@ git -c safe.directory="$PWD" <cmd>               # mount is root-owned: always p
 `autotest.py` needs `MOD_NAME`/`MOD_ID` exported when called directly (shell tools get them from `env.sh`):
 `source tools/env.sh && tools/autotest.py run "<names>"` does that. It loads the test-only mod by convention
 (`MOD_EXTRA_MODS` defaults to `<MOD_ID>tests`, linked into the game's `Mods/` on first use) and the test window is
-800x500 (`MOD_SCREEN`): vanilla hides the colonist bar below that, so a smaller window can't test it.
+800x800 (`MOD_SCREEN`): vanilla hides the colonist bar below 800x500, and the whole filter panel (right column, under the
+Learning Helper) needs about 290 px between the top of the screen and vanilla's alerts, letters and weather block, so 800x500 only ever
+shows its folded form.
 Global options go before the subcommand; exit codes 0 pass · 1 fail · 2 hang/crash/timeout · 3 env broken.
 Steam must be running (workshop Harmony loads only then); the harness always loads Harmony, which the test mod
 may use.

@@ -65,6 +65,21 @@ A box is ticked only when proven (build, scenario run named in `docs/test-runs.m
       static survives a load (a hidden roster in a fresh game behind a blank search field). It also covers the "reload
       resets state" half of the plan's `No save data` row. (user, 2026-11-14)
 
+- [x] **Phase 7 — the whole interface moves to the right column** (user, 2026-11-15) — one panel on the right edge, right
+      **under the Learning Helper** (`LearningReadout`), replacing spec §2's "right of the portrait area" and everything Phase 3
+      built around the bar's footprint (the search icon, the chip row under the bar, the empty-state line in the bar's place).
+      It follows the Learning Helper (hidden → top margin; expanded → pushed down) and folds into a search field plus a Filters
+      menu when the column between the Learning Helper and the alerts is too short. Defaults taken: 200 px wide (the helper's
+      width, flush with it); one Reset button (the empty-state Reset is gone, the empty line sits under it); the placeholder is
+      "Search by name" and the spec's "Search colonist by name" is the field's tooltip (it no longer fits 186 px); a click
+      between the panel's controls is consumed (it must not reach the map). The test window is now 800x720 (`MOD_SCREEN`).
+- [x] **Phase 7 — Inspired filter** (user, 2026-11-15) — a fifth chip, **Inspired** (after Idle), exactly the bar's inspiration
+      icon: `pawn.Inspired` (`ColonistBarColonistDrawer.DrawIcons`, `colonist.Inspired`). One status at a time like the others;
+      the dead are never inspired. Test: one scenario, 10 fixture colonists, 3 inspired, a real click on the chip.
+- [x] **Phase 7 — colour scheme** (user, 2026-11-15) — colour-blind friendly yet noticeable against the game: navy panel, sky-blue
+      edge, orange for the selected choice (dark text and a marker bar so it is not only a hue), yellow warning instead of red;
+      `tools/palette-check.py` checks it (contrast, grayscale brightness gap, protan/deutan/tritan simulation).
+
 Defaults taken unless told otherwise: sorting is per group (map/caravan); next/prev-colonist hotkeys and
 drag-box selection follow the filtered view (they read the same list); drag-reorder disabled while a
 filter/sort is active; skill presets Any/0/5/10/15; packageId `josh9817.colonycommand`.
@@ -162,7 +177,7 @@ Proof: `docs/test-runs.md` row 2026-11-15 03:22 (clean build `f11e93f`, 21/21 PA
 - [x] "No matching colonists" empty state with Reset — `Empty state` (real typing, real Reset click)
 - [x] Keyed translations (`Languages/English/Keyed/ColonyCommand.xml`; they render in game: the screenshots and the
       scenarios use them). Whether `rwdefs.py lint` reads Keyed files stays unverified
-- [x] Responsive: below 800x500 nothing is placed and nothing takes input (`Controls placement`: pure layout + the bar
+- [x] *(layout superseded by Phase 7: one panel in the right column)* Responsive: below 800x500 nothing is placed and nothing takes input (`Controls placement`: pure layout + the bar
       switched off); the search collapses to an icon that opens the field in a row under the chips when the free span beside
       the bar (right limit = screen width - 154 px alert column) is under 170 px — **this is the normal case at 800x500**
       and is what every real-input scenario runs in; the chips fold into one "Filters..." button when they do not fit
@@ -255,6 +270,27 @@ Defaults taken in Phase 5 (record; change only if the user says so):
 - [ ] Error log clean in a **user-loop** session (automated runs so far: 0 new errors in every row of `docs/test-runs.md`)
 - [ ] Release gate (user-approved): a full `autotest.py pkg-run` on the packaged copy, only with the user's explicit
       approval for this release (AGENTS.md: the sole exception to "no full sequences")
+
+## Phase 7 — Right-column panel, Inspired filter, colour scheme (user request, 2026-11-15)
+
+Design and verified engine facts: `docs/plan.md` §1.3 (Placement, Look) and §1.4 (Inspired).
+Proof: `docs/test-runs.md` row 2026-11-15 07:36 (11/11 PASS on the final code, build `1041c2b-dirty`: the work is not committed yet),
+the development runs 07:18-07:29 and the mutation checks 07:30 and 07:32 (five deliberate bugs, each caught by the intended scenario).
+`tools/palette-check.py`: 96/96 checks.
+
+- [x] Panel in the right column under the Learning Helper; folds when the column is too short; follows the helper; never
+      overlaps the bar, the helper or the alerts; swallows clicks between its controls — `Controls placement`, `Chip clicks`
+- [x] Inspired chip (`StatusFilter.Inspired`, `Predicates.Inspired`, `RosterCounts.Inspired`) — `Inspired filter`
+- [x] The Phase 3/4 controls still work from their new places — `Search field`, `Empty state`, `Skill filter`, `Sort controls`,
+      `Reset control`; `Status chips`, `Seam view`, `Name search` for the `RosterView`/`BarAdapter` edits
+- [x] Colour scheme checked: `python3 -I tools/palette-check.py`
+- [ ] **User-in-the-loop:** look at the panel at 1280x720 / 1920x1080 and UI scale 100/125/150 % (the folded form appears when
+      the alerts and letters leave less than ~234 px under the Learning Helper); with the Learning Helper off; with several
+      alerts; the colour scheme with your own eyes (and the Phase 6 checks above, which the new layout supersedes). Known limits to
+      judge: the right column is shared with the letters and alerts (they stack up from the weather block), so on a short screen with
+      many of them the panel folds to the search field plus a Filters menu, and when even that does not fit it overlaps the top
+      alert; and in the harness about 2 of 13 real chip clicks arrived but did nothing and had to be resent (the game had received
+      them; cause not proven; same family as the Phase 3 note below): does a real mouse ever miss a chip?
 
 ## Noted, out of scope (spec §6.2)
 
