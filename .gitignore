@@ -1,0 +1,43 @@
+# Local test state: log marks, error baselines, build ids, screenshots, the isolated test
+# profile (-savedatafolder), hand-off/session state, usage log
+.devlog/
+
+# Local agent tooling: ilspycmd and the decompiled game source (derived from the game, never committed)
+.tools/
+
+# Build output: the mod assembly (built by tools/build.sh) and MSBuild intermediates
+1.6/Assemblies/
+Source/**/bin/
+Source/**/obj/
+
+# Build output of the test-only removal probe (tools/autotest.py removal-check)
+tools/removal-probe/bin/
+tools/removal-probe/obj/
+
+# Packaged release copy (tools/package.sh)
+dist/
+
+# Python bytecode from the stdlib tools (run with python3 -I)
+__pycache__/
+*.pyc
+
+# Scratch/temp files from the shell tools
+*.tmp
+*.log
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Office lock files (spec document open in an editor)
+~$*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
