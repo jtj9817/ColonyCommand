@@ -25,17 +25,19 @@ Identity (in `tools/env.sh`): `MOD_NAME=ColonyCommand` (assembly, `Source/` dir,
 
 ```mermaid
 flowchart LR
-    boot["Bootstrap (MonoBehaviour, DontDestroyOnLoad)<br/>opens the window while Playing"] --> win
+    boot["Bootstrap (MonoBehaviour, DontDestroyOnLoad)<br/>opens the window while Playing; LateUpdate applies the view"] --> adapter
     win["ColonyCommandWindow (vanilla Window, GameUI layer)<br/>search · chips · skill · sort"] -->|ViewState| adapter
-    adapter["BarAdapter<br/>ExtraOnGUI (Layout) + WindowUpdate"] -->|read Entries| bar["Find.ColonistBar<br/>(vanilla)"]
+    win -.->|ExtraOnGUI + WindowUpdate: safety net| adapter
+    adapter["BarAdapter"] -->|read Entries| bar["Find.ColonistBar<br/>(vanilla)"]
     adapter --> view["RosterView (pure)<br/>name → status → skill → per-group stable sort"]
     view -->|rewrite Entries in place,<br/>relayout DrawLocs, cachedScale via reflection| bar
 ```
 
 - `ColonistBar.Entries` / `DrawLocs` return the bar's private lists **by reference**; the adapter rewrites them
   in place after each vanilla recache. Untouched when no criteria are active and sort = vanilla.
-- The window re-applies the view during the `Layout` event (bar ignores `Layout`), so a tick-driven
-  `MarkColonistsDirty` never reaches a drawn frame or a click. Details and open **[verify]** items: `docs/plan.md`.
+- `Bootstrap.LateUpdate` applies the view after every `Update` of the frame (so after the ticks) and before any OnGUI
+  event; the window's `ExtraOnGUI`/`WindowUpdate` repair dirties raised during OnGUI. A tick-driven `MarkColonistsDirty`
+  therefore never reaches a drawn frame or a click (proven in game, Phase 1: `docs/plan.md` §1.5).
 - Nothing is saved: windows live in `UIRoot.windows`; the bootstrap is a Unity object.
 
 ## Key Directories

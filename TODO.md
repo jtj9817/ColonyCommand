@@ -39,13 +39,29 @@ filter/sort is active; skill presets Any/0/5/10/15; packageId `josh9817.colonyco
 
 ## Phase 1 — Prove the zero-dependency seam (spec §6.1 step 1) — go/no-go gate
 
-- [ ] `Bootstrap` MonoBehaviour opens an empty `ColonyCommandWindow` while Playing; gone on main menu; reopened after load
-- [ ] `BarAdapter`: resolve `cachedScale` by reflection (fail closed + one log error); apply a hard-coded
+All proofs: `docs/test-runs.md` rows 2026-11-15 01:08–01:15; evidence and numbers in `docs/plan.md` §1.5.
+
+- [x] `Bootstrap` MonoBehaviour opens an empty `ColonyCommandWindow` while Playing; gone on main menu; reopened after load
+      (`Seam bootstrap`: one window and one Bootstrap; closed window reopens; save → main menu, 40 frames, 0 windows →
+      load → one window. Created from a `[StaticConstructorOnStartup]` class, not the `Mod` constructor: that runs on a
+      loader thread)
+- [x] `BarAdapter`: resolve `cachedScale` by reflection (fail closed + one log error); apply a hard-coded
       "hide every other colonist" view in `ExtraOnGUI`/`WindowUpdate`; relayout via own `ColonistBarDrawLocsFinder`
-- [ ] Prove: no full-roster flash after a dirty; click/hit-test lands on the visible pawn; drag reorder is a no-op;
+      (`Seam view`: scale 0.77 → 1.00, exact view then exact vanilla restore; `Seam fail closed`: missing member and an
+      exception each log exactly one error and hand the bar back. **Deviation:** the primary hook is
+      `Bootstrap.LateUpdate`; `ExtraOnGUI`/`WindowUpdate` are the safety net — `WindowUpdate` runs before the ticks)
+- [x] Prove: no full-roster flash after a dirty; click/hit-test lands on the visible pawn; drag reorder is a no-op;
       `displayOrder` unchanged; no errors on map switch / world view / caravan group
-- [ ] Prove no save data: saved file contains no `ColonyCommand` text
-- [ ] **Gate:** if any proof fails → stop and ask the user how to reduce the feature (no Harmony, Q2)
+      (`Seam dirty`: control 39/39 wrong, hooks 0/59; `Seam hit test`: real clicks; `Seam reorder`: control reaches
+      `Reorder`, view 0 calls; `Seam topology`: world view + caravan group; `Seam map switch`: second player map)
+- [x] Prove no save data: saved file contains no `ColonyCommand` text
+      (`Seam no save data`: the header lists the mod by packageId, as vanilla does for every mod, and is read as a
+      control; the game body has no `colonycommand` text)
+- [x] **Gate:** if any proof fails → stop and ask the user how to reduce the feature (no Harmony, Q2)
+      — **passed, no proof failed; no reduction needed.** The shipped assembly still references no Harmony.
+
+**Next:** Phase 2 (`ViewState`, `Predicates`, `RosterView`; the probe view in `BarAdapter` is replaced by the real one,
+and the `Seam *` scenarios stay as the seam's regression set).
 
 ## Phase 2 — Roster snapshot and predicates (spec §3, §4)
 
