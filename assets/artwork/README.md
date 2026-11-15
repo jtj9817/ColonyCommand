@@ -19,3 +19,5 @@ The generated composition uses a foreground group overlooking a settlement, rath
 ## Usage in the release
 
 `About/Preview.png` is derived from this illustration: cropped to 16:9, then set with the title **COLONY COMMAND** and the tagline **Find colonists without leaving the map.** in the open sky area. It is promotional artwork with text, **not** a gameplay capture; the in-game screenshots in `assets/screenshots/` show the real mod. The full-size titled version lives here as [`colony-command-cover-titled.png`](colony-command-cover-titled.png) (1673×940); `About/Preview.png` is the same image at 640×360. The titled version was produced with the built-in imagegen tool, preserving the original composition.
+
+The untitled [`colony-command-cover.png`](colony-command-cover.png) is also the banner at the top of the project `README.md`, which captions it as promotional artwork rather than a gameplay screenshot.
