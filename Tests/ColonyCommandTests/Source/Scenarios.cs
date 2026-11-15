@@ -14,6 +14,14 @@ namespace ColonyCommandTests
         public static readonly List<(string name, Action setUp)> All = new List<(string, Action)>
         {
             ("Harness wiring", HarnessWiring),
+            ("Seam bootstrap", SeamBootstrap),
+            ("Seam view", SeamView),
+            ("Seam dirty", SeamDirty),
+            ("Seam hit test", SeamHitTest),
+            ("Seam reorder", SeamReorder),
+            ("Seam topology", SeamTopology),
+            ("Seam map switch", SeamMapSwitch),
+            ("Seam no save data", SeamNoSaveData),
         };
 
         /// <summary>

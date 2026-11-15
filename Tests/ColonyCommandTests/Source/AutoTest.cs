@@ -65,6 +65,7 @@ namespace ColonyCommandTests
         private void Update()
         {
             Scenario.Update();
+            MenuProbe.Update();
             if (dir == null)
                 return;
             // Software rendering costs ~370% CPU even while idle: render 5 frames a second between scenarios.

@@ -83,6 +83,26 @@ namespace ColonyCommandTests
             return this;
         }
 
+        /// <summary>
+        /// Like <see cref="Expect"/>, but fails with a readable message after <paramref name="seconds"/> of real time
+        /// (the tick timeout is only a backstop, and stops counting while the game is paused or loading).
+        /// </summary>
+        public Scenario ExpectWithin(string label, float seconds, Func<bool> done, Func<string> why = null)
+        {
+            float deadline = -1f;
+            return Expect(label, () =>
+            {
+                if (done())
+                    return true;
+                float now = UnityEngine.Time.realtimeSinceStartup;
+                if (deadline < 0f)
+                    deadline = now + seconds;
+                else if (now > deadline)
+                    throw new TimeoutException($"not within {seconds:F0} s{(why != null ? ": " + why() : "")}");
+                return false;
+            });
+        }
+
         /// <summary>Runs <paramref name="action"/> once, then moves on in the same frame.</summary>
         public Scenario Do(string label, Action action) => Expect(label, () => { action(); return true; });
 
