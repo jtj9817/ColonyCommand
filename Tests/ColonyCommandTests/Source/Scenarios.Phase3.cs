@@ -46,17 +46,43 @@ namespace ColonyCommandTests
 
         /// <summary>
         /// A real click on the search field, or on its icon when the layout is compact (the field opens and takes the focus),
-        /// then waits for the keyboard focus.
+        /// repeated until the field holds the keyboard focus. The retry is an observed property of the harness: now and then
+        /// the first click of a run reaches the game's OnGUI root but never the window stack (no exception, not reproducible
+        /// by hand); the attempts needed are written to the run summary so the rate stays visible.
         /// </summary>
-        private static void FocusSearch(Scenario s)
+        private static void FocusSearch(Scenario s, Roster r)
         {
-            ClickStepAt(s, "click the search field (or its icon in the compact layout)", () =>
-            {
-                Placement p = TheWindow().CurrentPlacement;
-                return Center(p.SearchFieldShown ? p.Search : p.SearchIcon);
-            });
-            s.ExpectWithin("the field holds the keyboard focus", 10, () => TheWindow().SearchFocused,
-                () => $"placement: field shown {TheWindow().CurrentPlacement.SearchFieldShown}, compact {TheWindow().CurrentPlacement.SearchCompact}, field {TheWindow().CurrentPlacement.Search}, icon {TheWindow().CurrentPlacement.SearchIcon}; mouse {UI.MousePositionOnUIInverted}; input seen: {InputProbe.Describe()}; {InputDiagnostics()}");
+            System.Diagnostics.Process process = null;
+            int attempts = 0;
+            float sentAt = 0f;
+            s.Expect("click the search field (its icon in the compact layout) until it holds the keyboard focus", () =>
+                {
+                    ColonyCommandWindow w = TheWindow();
+                    if (w.SearchFocused)
+                    {
+                        r.Notes.Add($"focus click: {attempts} attempt(s)");
+                        return true;
+                    }
+                    if (process != null && !process.HasExited)
+                        return false;
+                    if (process != null)
+                    {
+                        Xdo.Check(process);
+                        process = null;
+                    }
+                    if (attempts > 0 && Time.realtimeSinceStartup - sentAt < 2.5f)
+                        return false;   // the game gets time to react before the next try
+                    if (attempts >= 4)
+                        throw new TimeoutException($"{attempts} clicks, the field never took the focus; input seen by the game: {InputProbe.Describe()}; {InputDiagnostics()}");
+                    Placement p = w.CurrentPlacement;
+                    Messages.Clear();   // a message is a window over the bar and swallows real input beneath it
+                    InputProbe.Clear();
+                    process = Xdo.Start(ClickArgs(Center(p.SearchFieldShown ? p.Search : p.SearchIcon)));
+                    sentAt = Time.realtimeSinceStartup;
+                    attempts++;
+                    return false;
+                })
+                .WaitFrames(8);
         }
 
         private static Vector2 ClearButton(ColonyCommandWindow w)
@@ -86,8 +112,7 @@ namespace ColonyCommandTests
                     Find.MainTabsRoot.EscapeCurrentTab(false);
             });
 
-            InputStep(s, "EXPERIMENT sacrificial click on the map", "mousemove --sync 700 300 sleep 0.3 mousedown 1 sleep 0.3 mouseup 1");
-            FocusSearch(s);
+            FocusSearch(s, r);
             InputStep(s, "type 'quill'", "type --delay 120 quill");
             s.ExpectWithin("typing alone, no Enter, narrowed the bar to A", 20,
                 () => ViewState.Query == "quill" && Shows(r, c, Letters(c, "A")),
@@ -100,25 +125,36 @@ namespace ColonyCommandTests
                 if (ViewState.Query != "quill ")
                     throw new InvalidOperationException($"the query is '{ViewState.Query}', expected 'quill ' (the space was typed)");
             });
+            s.Do("count main menu requests from here", () => MenuRequests.Count = 0);
             InputStep(s, "press Escape while the field is focused", "key Escape");
-            s.Do("Escape only dismissed the focus: the query and the view are kept, the main menu did not open", () =>
+            s.Do("Escape only dismissed the focus: the query and the view are kept, the main menu was not requested", () =>
                 {
                     if (TheWindow().SearchFocused)
                         throw new InvalidOperationException("the field is still focused");
                     if (ViewState.Query != "quill ")
                         throw new InvalidOperationException($"the query changed to '{ViewState.Query}'");
-                    if (Find.MainTabsRoot.OpenTab != null)
-                        throw new InvalidOperationException($"Escape opened the main tab {Find.MainTabsRoot.OpenTab.defName}");
+                    if (MenuRequests.Count != 0)
+                        throw new InvalidOperationException($"Escape asked for the main menu {MenuRequests.Count} time(s)");
                 })
                 .ExpectWithin("still showing A", 10, () => Shows(r, c, Letters(c, "A")), () => r.Last);
 
             InputStep(s, "control: space bar with the field unfocused", "key space");
             s.ExpectWithin("control: the pause hotkey works again, so the suppression above was real", 10, () => !Paused,
                     () => $"still {Find.TickManager.CurTimeSpeed}")
-                .Do("pause again", () => Find.TickManager.CurTimeSpeed = TimeSpeed.Paused);
+                .Do("pause again; the few ticks that ran let vanilla's AutoUndrafter undraft B (the tick counter was moved two days), so draft B again", () =>
+                {
+                    Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
+                    if (!c.B.Drafted)
+                        Fixtures.Draft(c.B);
+                    Fixtures.SetJobTag(c.B, Verse.AI.JobTag.DraftedOrder);
+                });
             InputStep(s, "control: Escape with the field unfocused", "key Escape");
-            s.ExpectWithin("control: it opens the main menu, so the Escape that only unfocused was consumed by the field", 10,
-                    () => Find.MainTabsRoot.OpenTab == MainButtonDefOf.Menu, () => $"open tab {Find.MainTabsRoot.OpenTab?.defName ?? "none"}")
+            s.Do("control: Escape asked for the main menu, so the Escape above that did not was consumed by the field", () =>
+                {
+                    if (MenuRequests.Count < 1)
+                        throw new InvalidOperationException("an unfocused Escape did not ask for the main menu: the check above proves nothing");
+                    r.Notes.Add($"control Escape: {MenuRequests.Count} menu request(s)");
+                })
                 .Do("close the menu", () => Find.MainTabsRoot.EscapeCurrentTab(false));
 
             ViewStep(s, r, c, "a status (Drafted) is set as well", () => ViewState.Status = StatusFilter.Drafted, Is(""));
@@ -149,7 +185,7 @@ namespace ColonyCommandTests
                 Find.Selector.ClearSelection();
                 Find.Selector.Select(c.B, playSound: false);
             });
-            FocusSearch(s);
+            FocusSearch(s, r);
             InputStep(s, "type 'quill'", "type --delay 120 quill");
             s.ExpectWithin("A is the only result", 20, () => Shows(r, c, Letters(c, "A")), () => r.Last)
                 .Do("typing selected nothing: B is still the selection", () =>
@@ -175,8 +211,12 @@ namespace ColonyCommandTests
                 ViewState.Query = "qui";
             }).ExpectWithin("A and D are shown", 20, () => Shows(r, c, Letters(c, "AD")), () => r.Last);
             InputStep(s, "press Enter", "key Return");
-            s.ExpectWithin("the first of them in bar order is selected", 10,
-                () => Find.Selector.SingleSelectedThing == c.R.Vanilla.Select(e => e.pawn).First(p => p == c.A || p == c.D));
+            // The first shown colonist, read from the bar's own list (a random map colonist whose name contains "qui" may come first).
+            Pawn firstShown = null;
+            s.Do("the first colonist the bar shows", () => firstShown = ShownPawns().First())
+                .ExpectWithin("it is selected, as a click on its portrait would select it", 10,
+                    () => Find.Selector.SingleSelectedThing == firstShown,
+                    () => $"first shown {firstShown?.LabelShort}; selected [{string.Join(", ", Find.Selector.SelectedObjects.Select(o => o.ToString()))}]");
 
             s.Do("a dead colonist is the only result", () => ViewState.Query = "ghost")
                 .ExpectWithin("F is shown", 20, () => Shows(r, c, Letters(c, "F")), () => r.Last);
@@ -198,12 +238,10 @@ namespace ColonyCommandTests
                 if (Find.Selector.SingleSelectedThing != c.B)
                     throw new InvalidOperationException("Enter selected something although the query holds only whitespace");
             });
-            s.Do("unfocus, then a real query", () =>
-                {
-                    TheWindow().Search.Unfocus();
-                    ViewState.Query = "quill";
-                })
-                .ExpectWithin("A is shown and the field is not focused", 20, () => Shows(r, c, Letters(c, "A")) && !TheWindow().SearchFocused, () => r.Last);
+            InputStep(s, "press Escape to unfocus the field", "key Escape");
+            s.Do("a real query", () => ViewState.Query = "quill")
+                .ExpectWithin("A is shown and the field is not focused", 20, () => Shows(r, c, Letters(c, "A")) && !TheWindow().SearchFocused,
+                    () => $"focused {TheWindow().SearchFocused}; {r.Last}");
             InputStep(s, "press Enter with the field unfocused", "key Return");
             s.Do("nothing happened: B is still selected", () =>
                 {
@@ -224,7 +262,10 @@ namespace ColonyCommandTests
             var s = new Scenario("Chip clicks", 4000000);
             var r = new Roster();
             Cast c = Stage(s, r);
+            float stripY = -1f;
+            s.WaitFrames(8).Do("remember where the chip row is", () => stripY = TheWindow().ChipRect(1).y);
             ViewStep(s, r, c, "the token isolates the cast", () => ViewState.Query = Token, Letters(c, "ABCDEF"));
+            s.Do("the chip row did not move when the bar lost three colonists", () => AssertChipRowAt(stripY));
             s.ExpectWithin("every chip label carries its live count", 10, () => ChipLabelsMatch(), () => ChipLabelsText());
             int clicks = 0;
             void Chip(string name, int index, StatusFilter expectStatus, string expectLetters)
@@ -233,6 +274,7 @@ namespace ColonyCommandTests
                 s.ExpectWithin($"{name}: status {expectStatus}, the bar shows [{expectLetters}]", 20,
                     () => ViewState.Status == expectStatus && Shows(r, c, Letters(c, expectLetters)),
                     () => $"status {ViewState.Status}; {r.Last}; chip {TheWindow().ChipRect(index)}, mouse {UI.MousePositionOnUIInverted}; {InputDiagnostics()}");
+                s.Do($"{name}: the chips stayed where they were (a second click lands on the same chip)", () => AssertChipRowAt(stripY));
             }
             Chip("Drafted", 1, StatusFilter.Drafted, "B");
             Chip("Drafted again: toggled off", 1, StatusFilter.None, "ABCDEF");
@@ -254,6 +296,13 @@ namespace ColonyCommandTests
                         throw new InvalidOperationException(ChipLabelsText());
                 })
                 .Start();
+        }
+
+        private static void AssertChipRowAt(float y)
+        {
+            float now = TheWindow().ChipRect(1).y;
+            if (Mathf.Abs(now - y) > 0.5f)
+                throw new InvalidOperationException($"the chip row moved from y={y:F1} to y={now:F1} while filtering: a second click would miss the chip");
         }
 
         private static bool ChipLabelsMatch()
@@ -287,6 +336,8 @@ namespace ColonyCommandTests
             var s = new Scenario("Empty state", 4000000);
             var r = new Roster();
             Cast c = Stage(s, r);
+            float stripY = -1f;
+            s.WaitFrames(8).Do("remember where the chip row is", () => stripY = TheWindow().ChipRect(1).y);
             s.Do("with results the line is not shown", () => ViewState.Query = Token)
                 .ExpectWithin("the cast is shown", 20, () => Shows(r, c, Letters(c, "ABCDEF")), () => r.Last)
                 .Do("no empty state", () =>
@@ -297,7 +348,7 @@ namespace ColonyCommandTests
                 .Do("clear the query", () => ViewState.Query = "")
                 .ExpectWithin("vanilla", 20, () => VanillaBack(r), () => r.Last);
 
-            FocusSearch(s);
+            FocusSearch(s, r);
             InputStep(s, "type a query nobody matches", "type --delay 120 zzqx");
             s.ExpectWithin("the bar is empty and the empty-state line shows", 20,
                     () => ViewState.Query == "zzqx" && !BarProbe.IsDirty(Bar) && BarProbe.CachedEntries(Bar).Count == 0 && TheWindow().CurrentPlacement.ShowEmpty,
@@ -313,6 +364,7 @@ namespace ColonyCommandTests
                     }
                     if (p.Strip.yMin < p.Empty.yMax)
                         throw new InvalidOperationException($"the chips {p.Strip} overlap the empty-state line {p.Empty}");
+                    AssertChipRowAt(stripY);   // an empty result must not move the chips either
                     if (TheWindow().ResetRect.xMax > p.Empty.xMax + 0.5f || TheWindow().ResetRect.xMin < p.Empty.xMin)
                         throw new InvalidOperationException($"Reset {TheWindow().ResetRect} is outside its line {p.Empty}");
                 });
@@ -333,6 +385,299 @@ namespace ColonyCommandTests
             ClickStepAt(s, "click Reset", () => Center(TheWindow().ResetRect));
             s.ExpectWithin("everything cleared", 20, () => !ViewState.AnythingSet && TheWindow().Search.filter.Text == "" && VanillaBack(r), () => r.Last)
                 .Start();
+        }
+
+        // ------------------------------------------------------------------------------------- Enter across maps
+
+        // Precondition: 6 colonists on the home map, a second home map with two colonists, a caravan of two. Trigger: real Enter
+        // with the query naming one colonist of each place, then (in the world view) one on the home map.
+        // Failure modes: Enter selects nothing or the wrong colonist for a colonist on another map (the map must follow), a
+        // caravan member (vanilla selects the caravan and shows the world), or in the world view (it must jump back to the map).
+        private static void EnterAcrossMaps()
+        {
+            var s = new Scenario("Enter across maps", 4000000);
+            Roster r = Prelude(s, 6);
+            Map home = null, second = null;
+            Settlement settlement = null;
+            Caravan caravan = null;
+            var members = new List<Pawn>();
+            Pawn Named(string nick) => members.First(p => ((NameTriple)p.Name).Nick == nick);
+            s.OnFinish(() =>
+            {
+                if (WorldRendererUtility.WorldSelected)
+                    CameraJumper.TryHideWorld();
+                if (home != null && !home.Disposed && Current.Game.CurrentMap != home)
+                    Current.Game.CurrentMap = home;
+                Find.WorldSelector.ClearSelection();
+                if (caravan != null && !caravan.Destroyed)
+                    Find.WorldObjects.Remove(caravan);
+                foreach (Pawn p in members.Where(p => !p.Destroyed))
+                    p.Destroy();
+                if (settlement != null && !settlement.Destroyed)
+                    Find.WorldObjects.Remove(settlement);
+            });
+            s.Do("settle a second home map with two colonists and form a caravan of two on the home tile", () =>
+            {
+                home = Find.CurrentMap;
+                PlanetTile tile = TileFinder.RandomSettlementTileFor(Faction.OfPlayer, mustBeAutoChoosable: false,
+                    extraValidator: t => !Find.WorldObjects.AnyWorldObjectAt(t));
+                settlement = SettleUtility.AddNewHome(tile, Faction.OfPlayer);
+                second = GetOrGenerateMapUtility.GetOrGenerateMap(tile, new IntVec3(60, 1, 60), null);
+                // Pawn generation comes first and all names are triples: a generated pawn may pick any existing one as a parent.
+                for (int i = 0; i < 2; i++)
+                {
+                    Pawn p = PawnGenerator.GeneratePawn(PawnKindDefOf.Colonist, Faction.OfPlayer);
+                    p.Name = new NameTriple("Probe", $"Second{i}", "Fixture");
+                    GenSpawn.Spawn(p, CellFinder.RandomClosewalkCellNear(second.Center, second, 8), second);
+                    members.Add(p);
+                }
+                var caravanPawns = new List<Pawn>();
+                for (int i = 0; i < 2; i++)
+                {
+                    Pawn p = PawnGenerator.GeneratePawn(PawnKindDefOf.Colonist, Faction.OfPlayer);
+                    p.Name = new NameTriple("Probe", $"Caravan{i}", "Fixture");
+                    members.Add(p);
+                    caravanPawns.Add(p);
+                }
+                caravan = CaravanMaker.MakeCaravan(caravanPawns, Faction.OfPlayer, home.Tile, addToWorldPawnsIfNotAlready: true);
+                Messages.Clear();
+            });
+            CaptureSteps(s, r, 10);   // 6 home + 2 second map + 2 caravan
+            s.Do("the home map is current", () =>
+            {
+                if (Find.CurrentMap != home)
+                    Current.Game.CurrentMap = home;
+            });
+            FocusSearch(s, r);
+
+            // 1. a colonist on the second map
+            InputStep(s, "type 'second0'", "type --delay 120 second0");
+            s.ExpectWithin("the second map's colonist is the only result", 20, () => ShownOnly(Named("Second0")),
+                () => $"query '{ViewState.Query}', field '{TheWindow().Search.filter.Text}', counts all {BarAdapter.Counts.All} of {BarAdapter.Counts.Eligible}, " +
+                    $"applied {BarAdapter.Applied} for version {BarAdapter.AppliedVersion} (now {ViewState.Version}), shown count {BarAdapter.Shown}, dirty {BarProbe.IsDirty(Bar)}, " +
+                    $"cached entries [{BarProbe.Describe(BarProbe.CachedEntries(Bar))}], locs {BarProbe.CachedLocs(Bar).Count}, second0 '{Named("Second0").LabelShort}' on map {Named("Second0").Map?.uniqueID.ToString() ?? "none"}, dead {Named("Second0").Dead}");
+            InputStep(s, "press Enter", "key Return");
+            s.ExpectWithin("selected, and the current map followed to the second map", 15,
+                () => Find.Selector.SingleSelectedThing == Named("Second0") && Find.CurrentMap == second,
+                () => $"selected [{string.Join(", ", Find.Selector.SelectedObjects.Select(o => o.ToString()))}], current map is {(Find.CurrentMap == second ? "the second" : "the home")} map");
+
+            // 2. a caravan member: vanilla selects the caravan and shows the world. (A jump to another map takes the keyboard
+            //    focus out of the field, as it does for any vanilla UI: focus it again before typing.)
+            s.Do("the query becomes 'caravan0' (typing is proven by the scenarios above; the Enter below is real)", () => ViewState.Query = "caravan0");
+            s.ExpectWithin("the caravan member is the only result", 20, () => ShownOnly(Named("Caravan0")),
+                () => $"query '{ViewState.Query}', field '{TheWindow().Search.filter.Text}', shown [{Names(ShownPawns())}]");
+            FocusSearch(s, r);
+            InputStep(s, "press Enter", "key Return");
+            s.ExpectWithin("the caravan is selected in the world view", 15,
+                () => WorldRendererUtility.WorldSelected && Find.WorldSelector.IsSelected(caravan),
+                () => $"world view {WorldRendererUtility.WorldSelected}, selected world objects {Find.WorldSelector.NumSelectedObjects}");
+
+            // 3. in the world view, a colonist on a map: vanilla jumps to the map and selects it
+            s.Do("the query becomes 'probe3' (a home colonist)", () => ViewState.Query = "probe3");
+            s.ExpectWithin("a home colonist is the only result", 20,
+                () => ShownPawns().Count == 1 && ((NameTriple)ShownPawns()[0].Name).Nick == "Probe3", () => $"shown [{Names(ShownPawns())}]");
+            FocusSearch(s, r);
+            InputStep(s, "press Enter in the world view", "key Return");
+            s.ExpectWithin("the map is showing again with that colonist selected", 15,
+                () => !WorldRendererUtility.WorldSelected && Find.Selector.SingleSelectedThing is Pawn p && ((NameTriple)p.Name).Nick == "Probe3",
+                () => $"world view {WorldRendererUtility.WorldSelected}, selected [{string.Join(", ", Find.Selector.SelectedObjects.Select(o => o.ToString()))}]")
+                .Start();
+        }
+
+        private static bool ShownOnly(Pawn pawn)
+        {
+            List<Pawn> shown = ShownPawns();
+            return shown.Count == 1 && shown[0] == pawn && !BarProbe.IsDirty(Bar);
+        }
+
+        // ---------------------------------------------------------------------------------------- Controls placement
+
+        // Precondition: the map's own 3 colonists, then topped up to 6, 12 and 24 (1 to 3 rows, shrinking portraits), a caravan
+        // (a second group, frames), a view, the bar switched off. Trigger: where the controls are, from the real bar's lists;
+        // and the pure layout over screen sizes, bar shapes and a text too wide for the screen.
+        // Failure modes: a control overlapping a portrait, its name label, a group frame, the alert column at the right edge,
+        // each other or the edge of the screen; the controls staying on screen with the bar hidden; no collapse when the chips
+        // do not fit.
+        private static void ControlsPlacement()
+        {
+            var s = new Scenario("Controls placement", 4000000);
+            Roster r = Prelude(s, 3);
+            Caravan caravan = null;
+            var members = new List<Pawn>();
+            s.OnFinish(() =>
+            {
+                Find.PlaySettings.showColonistBar = true;
+                if (caravan != null && !caravan.Destroyed)
+                    Find.WorldObjects.Remove(caravan);
+                foreach (Pawn p in members.Where(p => !p.Destroyed))
+                    p.Destroy();
+            });
+            s.Do("the pure layout over screen sizes and bar shapes", () => PureLayoutSweep(r));
+            foreach (int n in new[] { 3, 6, 12, 24 })
+            {
+                int total = n;
+                s.Do($"{total} colonists", () => Fixtures.EnsureColonists(s, total))
+                    .ExpectWithin($"{total} colonists captured", 30, () => CaptureVanilla(r, total), () => r.Last)
+                    .WaitFrames(8)
+                    .Do($"{total} colonists: the controls are clear of the portraits", () => AssertControlsClear(r, $"{total} colonists, vanilla"))
+                    .Do($"{total} colonists: a view that keeps only the fixtures", () => ViewState.Query = "Fixture")
+                    .WaitFrames(8)
+                    .Do($"{total} colonists with a view: the controls are still clear", () => AssertControlsClear(r, $"{total} colonists, view"))
+                    .Do("no criteria", () => ViewState.Reset())
+                    .ExpectWithin("vanilla", 20, () => VanillaBack(r), () => r.Last);
+            }
+            s.Do("a caravan of two: a second group with frames", () =>
+                {
+                    for (int i = 0; i < 2; i++)
+                    {
+                        Pawn p = PawnGenerator.GeneratePawn(PawnKindDefOf.Colonist, Faction.OfPlayer);
+                        p.Name = new NameTriple("Probe", $"Caravan{i}", "Fixture");
+                        members.Add(p);
+                    }
+                    caravan = CaravanMaker.MakeCaravan(members, Faction.OfPlayer, Find.CurrentMap.Tile, addToWorldPawnsIfNotAlready: true);
+                })
+                .ExpectWithin("26 colonists", 30, () => CaptureVanilla(r, 26), () => r.Last)
+                .WaitFrames(8)
+                .Do("two groups: the controls are clear of the portraits and the group frames", () => AssertControlsClear(r, "two groups"))
+                .Do("hide the colonist bar (a vanilla setting)", () => Find.PlaySettings.showColonistBar = false)
+                .WaitFrames(8)
+                .Do("the controls went with it: nothing placed, nothing focused, the game's hotkeys are free", () =>
+                {
+                    if (TheWindow().CurrentPlacement.Visible)
+                        throw new InvalidOperationException("the controls show although the colonist bar is hidden");
+                    if (TheWindow().CommonSearchWidget != null)
+                        throw new InvalidOperationException("the hidden field is still registered as a search widget");
+                    Find.PlaySettings.showColonistBar = true;
+                })
+                .Start();
+        }
+
+        private static void AssertControlsClear(Roster r, string label)
+        {
+            Placement p = TheWindow().CurrentPlacement;
+            if (!p.Visible)
+                throw new InvalidOperationException($"{label}: the controls are not placed");
+            ColonistBar bar = Bar;
+            float scale = bar.Scale;
+            Vector2 size = bar.Size;
+            List<ColonistBar.Entry> entries = BarProbe.CachedEntries(bar);
+            int groups = entries.Count == 0 ? 0 : entries[entries.Count - 1].group + 1;
+            float margin = groups >= 2 ? 12f * scale : 0f;
+            // What the bar draws: each portrait, the group frame around it (12 * scale), and under it the name label (about 20 px of
+            // text), which hangs out of the frame, so below the portrait the larger of the two counts.
+            var drawn = new List<Rect>();
+            foreach (Vector2 loc in BarProbe.CachedLocs(bar))
+                drawn.Add(new Rect(loc.x - margin, loc.y - margin, size.x + 2f * margin, margin + size.y + Mathf.Max(Mathf.Max(20f, 32f * scale), margin)));
+            var screen = new Rect(0f, 0f, UI.screenWidth, UI.screenHeight);
+            var controls = new List<(string name, Rect rect)> { ("chips", p.Strip) };
+            if (p.SearchFieldShown)
+                controls.Add(("search field", p.Search));
+            if (p.SearchCompact)
+                controls.Add(("search icon", p.SearchIcon));
+            if (p.ShowEmpty)
+                controls.Add(("empty line", p.Empty));
+            foreach ((string name, Rect rect) in controls)
+            {
+                if (rect.width <= 0f || rect.xMin < 0f || rect.yMin < 0f || rect.xMax > screen.xMax || rect.yMax > screen.yMax)
+                    throw new InvalidOperationException($"{label}: the {name} {rect} is not on the {screen.size} screen");
+                if (rect.xMax > UI.screenWidth - ControlsLayout.AlertsWidth)
+                    throw new InvalidOperationException($"{label}: the {name} {rect} reaches into the alert column (x > {UI.screenWidth - ControlsLayout.AlertsWidth})");
+                foreach (Rect portrait in drawn)
+                {
+                    if (rect.Overlaps(portrait))
+                        throw new InvalidOperationException($"{label}: the {name} {rect} overlaps the portrait area {portrait}");
+                }
+            }
+            for (int i = 0; i < controls.Count; i++)
+            {
+                for (int j = i + 1; j < controls.Count; j++)
+                {
+                    if (controls[i].rect.Overlaps(controls[j].rect))
+                        throw new InvalidOperationException($"{label}: the {controls[i].name} {controls[i].rect} overlaps the {controls[j].name} {controls[j].rect}");
+                }
+            }
+            r.Notes.Add($"{label}: scale {scale:F2}, {groups} group(s), strip y {p.Strip.y:F0}, {(p.SearchCompact ? "search icon" : "search field")}");
+        }
+
+        /// <summary>ControlsLayout.Compute alone: screens from the 800x500 minimum to ultrawide, bars from one portrait to the widest vanilla allows.</summary>
+        private static void PureLayoutSweep(Roster r)
+        {
+            int cases = 0, compactSearch = 0, compactStrip = 0;
+            foreach (int w in new[] { 800, 1024, 1280, 1600, 1920, 2560, 3440 })
+            {
+                foreach (int h in new[] { 500, 720, 1080, 1440 })
+                {
+                    float maxHalf = (w - 520f) / 2f;   // the vanilla bar: screenWidth - 520 wide, centred
+                    foreach (float half in new[] { 14f, 96f, maxHalf * 0.5f, maxHalf })
+                    {
+                        foreach (float bottom in new[] { 80f, 119.7f, 180f })
+                        {
+                            foreach (bool empty in new[] { false, true })
+                            {
+                                foreach (float stripWidth in new[] { 258f, 560f, 5000f })
+                                {
+                                    var bar = new BarMetrics { HasPortraits = true, MinX = w / 2f - half, MaxX = w / 2f + half, BottomY = bottom, PortraitHeight = 48f };
+                                    foreach (bool open in new[] { false, true })
+                                    {
+                                        Placement p = ControlsLayout.Compute(w, h, bar, empty, stripWidth, 90f, 210f, open);
+                                        CheckPlacement(p, w, h, bar, empty, stripWidth, open);
+                                        cases++;
+                                        compactSearch += p.SearchCompact ? 1 : 0;
+                                        compactStrip += p.StripCompact ? 1 : 0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            foreach ((int w, int h) in new[] { (799, 500), (800, 499), (640, 360), (320, 200) })
+            {
+                Placement p = ControlsLayout.Compute(w, h, new BarMetrics(), false, 258f, 90f, 210f);
+                if (p.Visible)
+                    throw new InvalidOperationException($"the controls show at {w}x{h}, below the 800x500 the colonist bar needs");
+            }
+            if (compactSearch == 0 || compactStrip == 0)
+                throw new InvalidOperationException($"the sweep never reached the compact layouts (search {compactSearch}, strip {compactStrip}): it proves nothing about them");
+            r.Notes.Add($"pure layout: {cases} cases, {compactSearch} with the search icon, {compactStrip} with the chips folded");
+        }
+
+        private static void CheckPlacement(Placement p, int w, int h, BarMetrics bar, bool empty, float stripWidth, bool open)
+        {
+            string at = $"{w}x{h}, bar {bar.MinX:F0}..{bar.MaxX:F0} to y {bar.BottomY:F0}, empty {empty}, strip {stripWidth}, open {open}";
+            if (!p.Visible)
+                throw new InvalidOperationException($"not visible at {at}");
+            float limit = w - ControlsLayout.AlertsWidth;
+            var all = new List<(string name, Rect rect)> { ("chips", p.Strip) };
+            if (p.SearchFieldShown)
+                all.Add(("search field", p.Search));
+            if (p.SearchCompact)
+                all.Add(("search icon", p.SearchIcon));
+            if (empty)
+                all.Add(("empty line", p.Empty));
+            // The portraits, labels and frames end at BottomY and span MinX..MaxX (the layout is handed the unfiltered bar's footprint).
+            var bounds = Rect.MinMaxRect(bar.MinX, 0f, bar.MaxX, bar.BottomY);
+            foreach ((string name, Rect rect) in all)
+            {
+                if (rect.xMin < 0f || rect.yMin < 0f || rect.xMax > w || rect.yMax > h)
+                    throw new InvalidOperationException($"the {name} {rect} leaves the screen at {at}");
+                if (rect.xMax > limit + 0.01f)
+                    throw new InvalidOperationException($"the {name} {rect} reaches into the alert column (x > {limit}) at {at}");
+                if (name != "empty line" && rect.Overlaps(bounds) && !(name == "search icon" && false))
+                    throw new InvalidOperationException($"the {name} {rect} overlaps the bar {bounds} at {at}");
+            }
+            if (p.Strip.yMin < bar.BottomY)
+                throw new InvalidOperationException($"the chips {p.Strip} start above the bar's end {bar.BottomY} at {at}");
+            for (int i = 0; i < all.Count; i++)
+            {
+                for (int j = i + 1; j < all.Count; j++)
+                {
+                    if (all[i].rect.Overlaps(all[j].rect))
+                        throw new InvalidOperationException($"the {all[i].name} {all[i].rect} overlaps the {all[j].name} {all[j].rect} at {at}");
+                }
+            }
+            if (stripWidth > w - ControlsLayout.AlertsWidth - 16f && !p.StripCompact)
+                throw new InvalidOperationException($"{stripWidth} px of chips were not folded into the Filters button at {at}");
         }
     }
 }

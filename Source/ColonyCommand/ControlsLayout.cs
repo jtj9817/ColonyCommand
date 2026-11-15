@@ -76,11 +76,11 @@ namespace ColonyCommand
 
             // Search: right of the portrait area, level with the first row.
             float anchor = center + MinHalfBar;
-            if (bar.HasPortraits && !showEmpty)
+            if (bar.HasPortraits)
                 anchor = Mathf.Max(anchor, bar.MaxX);
             float x = anchor + SideMargin;
             float span = rightLimit - x;
-            float y = RowTop + (bar.HasPortraits && !showEmpty ? Mathf.Max(0f, (bar.PortraitHeight - ControlHeight) / 2f) : 0f);
+            float y = RowTop;   // level with the top of the first row, whatever the portrait size: it must not move with the view
             p.SearchCompact = span < MinInlineSearchWidth;
             if (!p.SearchCompact)
             {
@@ -101,8 +101,8 @@ namespace ColonyCommand
                 p.Empty = new Rect(Mathf.Clamp(center - w / 2f, SideMargin, rightLimit - w), RowTop, w, ControlHeight);
             }
 
-            // Strip: under everything the bar draws (or under the empty-state line).
-            float top = showEmpty || !bar.HasPortraits ? RowTop + ControlHeight : bar.BottomY;
+            // Strip: under everything the bar draws (the footprint of the unfiltered bar, so it stays put while filtering).
+            float top = bar.HasPortraits ? bar.BottomY : RowTop + ControlHeight;
             p.StripCompact = stripWidth > rightLimit - SideMargin;
             float sw = p.StripCompact ? Mathf.Min(filtersButtonWidth, rightLimit - SideMargin) : stripWidth;
             p.Strip = new Rect(Mathf.Clamp(center - sw / 2f, SideMargin, rightLimit - sw), top + Gap, sw, ControlHeight);
@@ -111,15 +111,53 @@ namespace ColonyCommand
             return p;
         }
 
-        /// <summary>Reads the portrait extent from the vanilla bar (draw locations, size, scale, group count), without recaching it.</summary>
-        public static BarMetrics Measure(ColonistBar bar, int groupCount)
+        /// <summary>
+        /// The bigger of two footprints. The controls are anchored to the bar as the game would draw it unfiltered, not to the
+        /// current view: a filter that leaves fewer rows must not make the chips jump out from under the cursor.
+        /// </summary>
+        public static BarMetrics Union(BarMetrics a, BarMetrics b)
         {
-            List<Vector2> locs = bar.DrawLocs;
-            var m = new BarMetrics { HasPortraits = locs.Count > 0, PortraitHeight = bar.Size.y };
+            if (!a.HasPortraits)
+                return b;
+            if (!b.HasPortraits)
+                return a;
+            return new BarMetrics
+            {
+                HasPortraits = true,
+                MinX = Mathf.Min(a.MinX, b.MinX),
+                MaxX = Mathf.Max(a.MaxX, b.MaxX),
+                BottomY = Mathf.Max(a.BottomY, b.BottomY),
+                PortraitHeight = Mathf.Max(a.PortraitHeight, b.PortraitHeight),
+            };
+        }
+
+        /// <summary>
+        /// The footprint of the tallest bar there can be in one row (portraits at scale 1 plus a weapon icon), as wide as the
+        /// narrowest bar the layout is built around. The controls never sit higher than under this: with fewer colonists the
+        /// portraits grow, and a row that moved with the portrait size would jump away from the cursor.
+        /// </summary>
+        public static BarMetrics Baseline(float screenWidth, bool weaponsShown)
+        {
+            float center = screenWidth / 2f;
+            return new BarMetrics
+            {
+                HasPortraits = true,
+                MinX = center - MinHalfBar,
+                MaxX = center + MinHalfBar,
+                BottomY = RowTop + (weaponsShown ? 48f * 1.95f : 48f + 32f),
+                PortraitHeight = 48f,
+            };
+        }
+
+        /// <summary>The footprint of the bar as drawn right now (draw locations, size, scale, group count), without recaching it.</summary>
+        public static BarMetrics Measure(ColonistBar bar, int groupCount) => Measure(bar.DrawLocs, bar.Size, bar.Scale, groupCount);
+
+        /// <summary>The footprint of a layout: draw locations of the portraits, their size and scale, and how many groups there are.</summary>
+        public static BarMetrics Measure(List<Vector2> locs, Vector2 size, float scale, int groupCount)
+        {
+            var m = new BarMetrics { HasPortraits = locs.Count > 0, PortraitHeight = size.y };
             if (!m.HasPortraits)
                 return m;
-            Vector2 size = bar.Size;
-            float scale = bar.Scale;
             float minX = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
             for (int i = 0; i < locs.Count; i++)
             {

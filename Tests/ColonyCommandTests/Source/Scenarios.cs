@@ -33,6 +33,8 @@ namespace ColonyCommandTests
             ("Search Enter", SearchEnter),
             ("Chip clicks", ChipClicks),
             ("Empty state", EmptyState),
+            ("Enter across maps", EnterAcrossMaps),
+            ("Controls placement", ControlsPlacement),
         };
 
         /// <summary>

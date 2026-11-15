@@ -202,25 +202,78 @@ namespace ColonyCommandTests
     {
         public static readonly System.Collections.Generic.List<string> Events = new System.Collections.Generic.List<string>();
 
-        public static void Clear() => Events.Clear();
-
-        internal static void Record()
+        public static void Clear()
         {
-            Event e = Event.current;
-            if (e.type == EventType.Layout || e.type == EventType.Repaint || Events.Count > 200)
-                return;
-            if (e.isKey)
-                Events.Add($"f{Time.frameCount} {e.type} {e.keyCode} '{(e.character == 0 ? ' ' : e.character)}'");
-            else if (e.isMouse)
-                Events.Add($"f{Time.frameCount} {e.type} b{e.button} ({e.mousePosition.x:F0},{e.mousePosition.y:F0})");
+            Events.Clear();
+            RootCalls.Clear();
+            WinCalls.Clear();
         }
 
-        public static string Describe() => string.Join(" | ", Events);
+        /// <summary>Calls by event type at the two points of the chain, to show whether the window stack was reached at all.</summary>
+        public static readonly System.Collections.Generic.Dictionary<string, int> RootCalls = new System.Collections.Generic.Dictionary<string, int>();
+        public static readonly System.Collections.Generic.Dictionary<string, int> WinCalls = new System.Collections.Generic.Dictionary<string, int>();
+
+        private static void Count(System.Collections.Generic.Dictionary<string, int> d, string key)
+        {
+            d.TryGetValue(key, out int n);
+            d[key] = n + 1;
+        }
+
+        public static string Tally() =>
+            "root{" + string.Join(",", RootCalls.Select(kv => $"{kv.Key}:{kv.Value}")) + "} win{" + string.Join(",", WinCalls.Select(kv => $"{kv.Key}:{kv.Value}")) + "}";
+
+        /// <summary>
+        /// <paramref name="where"/> says at which point of the OnGUI chain the event was seen ("root" = the start of
+        /// <c>UIRoot_Play.UIRootOnGUI</c>, "win" = the top of the mod window's <c>ExtraOnGUI</c>). The raw type survives a
+        /// <c>Use()</c>, so an event consumed between the two still shows up at "win" as <c>raw=MouseDown type=Used</c>.
+        /// </summary>
+        internal static void Record(string where)
+        {
+            Event e = Event.current;
+            EventType raw = e.rawType;
+            Count(where == "root" ? RootCalls : WinCalls, raw.ToString());
+            if (raw == EventType.Layout || raw == EventType.Repaint || Events.Count > 300)
+                return;
+            if (raw == EventType.KeyDown || raw == EventType.KeyUp)
+                Events.Add($"f{Time.frameCount} {where} raw={raw} type={e.type} {e.keyCode}");
+            else if (raw == EventType.MouseDown || raw == EventType.MouseUp)
+                Events.Add($"f{Time.frameCount} {where} raw={raw} type={e.type} b{e.button} ({e.mousePosition.x:F0},{e.mousePosition.y:F0})");
+        }
+
+        public static string Describe() => string.Join(" | ", Events) + " " + Tally();
     }
 
     [HarmonyPatch(typeof(ColonyCommandWindow), nameof(ColonyCommandWindow.ExtraOnGUI))]
     public static class Patch_Window_ExtraOnGUI_Input
     {
-        public static void Prefix() => InputProbe.Record();
+        public static void Prefix() => InputProbe.Record("win");
+    }
+
+    [HarmonyPatch(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI))]
+    public static class Patch_UIRootPlay_OnGUI_Input
+    {
+        public static void Prefix() => InputProbe.Record("root");
+    }
+}
+
+namespace ColonyCommandTests
+{
+    /// <summary>
+    /// Counts requests for the main menu tab. The harness closes every window that pauses the game within a frame, so "is the
+    /// menu open" cannot be polled after Escape; the request itself (what <c>UIRoot_Play.OpenMainMenuShortcut</c> makes) can.
+    /// </summary>
+    public static class MenuRequests
+    {
+        public static int Count;
+    }
+
+    [HarmonyPatch(typeof(MainTabsRoot), nameof(MainTabsRoot.ToggleTab))]
+    public static class Patch_MainTabsRoot_ToggleTab
+    {
+        public static void Prefix(MainButtonDef newTab)
+        {
+            if (newTab == MainButtonDefOf.Menu)
+                MenuRequests.Count++;
+        }
     }
 }

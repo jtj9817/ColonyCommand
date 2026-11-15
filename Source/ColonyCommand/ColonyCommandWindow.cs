@@ -185,6 +185,9 @@ namespace ColonyCommand
             ColonistBar bar = Find.ColonistBar;
             List<ColonistBar.Entry> entries = bar.Entries;
             BarMetrics metrics = ControlsLayout.Measure(bar, entries.Count == 0 ? 0 : entries[entries.Count - 1].group + 1);
+            if (BarAdapter.Applied)
+                metrics = ControlsLayout.Union(metrics, BarAdapter.VanillaFootprint);   // anchored to the unfiltered bar: no jumping
+            metrics = ControlsLayout.Union(metrics, ControlsLayout.Baseline(UI.screenWidth, Prefs.ShowWeaponsUnderPortraitMode != ShowWeaponsUnderPortraitMode.Never));
             ChipWidths(out float stripWidth);
             Vector2 resetSize, filtersSize, emptySize;
             using (new TextBlock(GameFont.Small))
