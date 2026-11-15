@@ -318,4 +318,27 @@ evidence. Verify anything load-bearing against the decompiled source (`tools/van
 - Drafting does not touch `lastJobTag`; the think tree does, a tick or two later (`DraftedOrder`). In a paused game stage the
   tag directly and prove the real path once with `TickManager.DoSingleTick()`. `GenDate.DaysPassed` is `TicksGame / 60000`:
   `TickManager.DebugSetTicksGame` moves the idle icon's day-1 gate both ways (restore the tick when the scenario ends). (CC)
+- **Vanilla's alert column** (`AlertsReadout`) is 154 px wide at the right edge and is anchored to the letter stack, growing
+  *upward* to the top of the screen: with enough alerts it covers the top-right corner. Keep controls left of
+  `screenWidth - 154`. The colonist bar reserves 260 px per side, so a full-width bar leaves ~90 px beside it. (CC)
+- A scenario step that waits for "the view shows X" **passes vacuously when X equals the previous state** (the cast's letters
+  are the same with or without a filter that only hides the map's own colonists): also require that the view in the bar was
+  built for the *current* criteria (`BarAdapter.AppliedVersion == ViewState.Version`). The click that followed used the old
+  layout and missed. (CC)
+- **Layout that follows the filtered view moves under the cursor**: portraits grow as colonists are hidden. Anchor click
+  targets to something the filter does not change (the unfiltered footprint plus a one-row floor), and assert the rect
+  does not move across a click. (CC)
+- Real input: `GUI.GetNameOfFocusedControl` may only be called during OnGUI, so keep a copy of the focus state taken in
+  OnGUI; `QuickSearchWidget.Unfocus()` from a scenario step (an Update) does nothing, press a real Escape instead. A jump to
+  another map (Enter on a colonist there) takes the keyboard focus out of any field. The harness closes the main-menu tab
+  within a frame, so count `MainTabsRoot.ToggleTab(Menu)` requests instead of polling `OpenTab`. (CC)
+- A real click occasionally never reaches `Window.ExtraOnGUI` although `UIRoot_Play.UIRootOnGUI` saw it (no exception, no log
+  line, not reproducible by hand): retry the click in a step, and record the attempts. `InputProbe` (test mod) shows the raw
+  events at both points. (CC)
+- `TickManager.DebugSetTicksGame` forward + a few running ticks lets `AutoUndrafter` undraft a drafted fixture at once (it
+  compares against the tick of the draft): re-draft after any control that unpauses. (CC)
+- **Any code that runs in `Update`/`LateUpdate` and reads `ColonistBar.Entries` must wait for the game to be ready**: while a game
+  loads in place the new `Game` is current but `Find.World` is null, and the bar's recache throws a NullReferenceException.
+  Guard with `!LongEventHandler.ShouldWaitForEvent && Current.Game?.World != null`. A guard-less read once switched the seam off
+  for the rest of the session (it only showed after a scenario that reloads: run those before the real-input ones). (CC)
 

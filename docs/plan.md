@@ -74,9 +74,13 @@ agreed with the user), never patched with Harmony.
   constructor as first planned — `LoadAllPlayData` (which creates the `Mod` classes) is queued with
   `doAsynchronously: true`, a loader thread where Unity objects cannot be created, whereas `CallAll` for static
   constructors is queued synchronously (`Root.cs`).
-- Placement: rect computed from the bar's own `DrawLocs`/`Size` each frame — search field in the free
-  right-hand 260 px beside the bar; chip strip directly under the bar's lowest row. Window rect shrinks to the
-  controls only, so it never covers portraits (spec: never steal clicks from visible portraits).
+- Placement (built, `ControlsLayout`, proven Phase 3): the window's rect is **exactly the search field**, so it never covers a
+  portrait; the chip row and the empty-state line are drawn in screen space from `ExtraOnGUI`. Everything is placed from the
+  bar's own lists on every event: search field right of the portraits (level with the first row) when at least 170 px are free
+  before the alert column (`screenWidth - 154 - 8`), otherwise a search icon with the opened field in a row under the chips;
+  chips under everything the bar draws, anchored to the **unfiltered** footprint (`BarAdapter.VanillaFootprint`, measured from
+  the vanilla layout at each build) and a one-row baseline so they do not move while filtering; hidden below 800x500, with the
+  bar off (`showColonistBar`) or the tile picker up.
 
 ### 1.4 Predicates and values (spec §3.2, §4) — implemented and proven in Phase 2
 
@@ -174,6 +178,7 @@ skill levels, a mood offset (thought/need level). No rooms, power, items or anim
 | `Sort and restore` (P2, passed) | non-deterministic ties; unavailable values not last; vanilla order not restored; `displayOrder` mutated |
 | `Bar integrity` (P2, passed) | DrawLocs/Entries out of sync after a dirty (IndexOutOfRange), hit-test returns a hidden pawn, drag reorder writes `displayOrder` |
 | `View reset on load` (P2, passed) | the static `ViewState` survives a load: a hidden roster in a fresh game behind a blank search field (covers the "reload resets state" half of `No save data`) |
+| `Search field` / `Search Enter` / `Enter across maps` / `Chip clicks` / `Empty state` / `Controls placement` (P3, passed) | the controls: see `TODO.md` Phase 3 and `test-runs.md` 03:22 |
 | `Live refresh` | draft/injure/kill a fixture colonist → counts and view update without reopening |
 | `No save data` | save after use contains no `ColonyCommand` string; reload resets state |
 | `Core-only load` | release package loads with Core only, no missing-dependency errors (pkg-run / user check) |

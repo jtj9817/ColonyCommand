@@ -152,12 +152,44 @@ Defaults taken in Phase 2 (record; change only if the user says so):
 
 ## Phase 3 — Search field and filter strip UI (spec §2)
 
-- [ ] `QuickSearchWidget` right of the bar; `CommonSearchWidget` override (hotkeys suppressed while typing);
-      Esc unfocuses; × clears query only; Enter selects first visible pawn (normal selection semantics)
-- [ ] Chip row under the bar's lowest row: All / Drafted / Injured / Idle with counts; one active; click again toggles off
-- [ ] "No matching colonists" empty state with reset
-- [ ] Keyed translations (`Languages/English/Keyed`)
-- [ ] Responsive: collapse search to an icon and chips into a Filters menu when space is short; never overlap portraits or alerts
+Proof: `docs/test-runs.md` row 2026-11-15 03:22 (clean build `f11e93f`, 21/21 PASS); development notes in the 02:31-03:19 rows.
+
+- [x] `QuickSearchWidget` beside the bar; `CommonSearchWidget` override (hotkeys suppressed while typing); Esc unfocuses;
+      × clears query only; Enter selects the first visible pawn (normal selection semantics) — `Search field`,
+      `Search Enter`, `Enter across maps` (second map, caravan member, world view; Phase 2 open point 5)
+- [x] Chip row under the bar: All / Drafted / Injured / Idle with live counts; one active; click again toggles off — `Chip
+      clicks` (real clicks; the row does not move while filtering)
+- [x] "No matching colonists" empty state with Reset — `Empty state` (real typing, real Reset click)
+- [x] Keyed translations (`Languages/English/Keyed/ColonyCommand.xml`; they render in game: the screenshots and the
+      scenarios use them). Whether `rwdefs.py lint` reads Keyed files stays unverified
+- [x] Responsive: below 800x500 nothing is placed and nothing takes input (`Controls placement`: pure layout + the bar
+      switched off); the search collapses to an icon that opens the field in a row under the chips when the free span beside
+      the bar (right limit = screen width - 154 px alert column) is under 170 px — **this is the normal case at 800x500**
+      and is what every real-input scenario runs in; the chips fold into one "Filters..." button when they do not fit
+      (geometry proven by 1344 synthetic cases; the menu itself is not exercised in game because four chips always fit at
+      800 px — user-in-the-loop, Phase 6); nothing overlaps a portrait, label, group frame, the alert column or another
+      control (`Controls placement`: 4032 synthetic cases + real bars of 3-24 colonists and two groups)
+
+Defaults taken in Phase 3 (record; change only if the user says so):
+
+- **Where the search goes:** the spec puts it "right of the portrait area when width permits". Vanilla's alert column is 154
+  px wide at the right edge and can grow to the top of the screen, and the bar leaves only 260 px per side, so beside a full bar
+  there are ~90 px. The field is inline only when >= 170 px are free (screens from ~960 px with a narrow bar); otherwise a
+  search icon stands in and its opened field is a row under the chips. A field holding a query is never hidden.
+- **The chip row is anchored to the unfiltered bar** (its footprint measured from the vanilla layout at every build) and
+  never sits higher than under a one-row bar at scale 1 with a weapon icon (y ~119): filtering changes the portrait size and
+  row count, and a row that followed them would move out from under the cursor. Cost: a gap under small bars.
+- **Chip counts and the view are re-evaluated every 0.25 s real time** (`BarAdapter.RefreshSeconds`), so the counts follow the
+  game. This is Phase 5's throttle, done early because the chips need it; Phase 5's boxes stay open until `Live refresh`
+  proves them.
+- **Enter in a focused field with a non-blank query** selects the first result; afterwards vanilla's own windows (the inspect
+  pane, a map change) take the keyboard focus out of the field.
+- **The mod never touches the bar while a game loads** (`BarAdapter.GameReady`); a transient exception there used to switch
+  the seam off for the whole session.
+
+Open observation (not a mod defect as far as known): in the harness a real click sometimes never reaches the window stack
+(`ExtraOnGUI`) although the game's OnGUI root saw it; real-input scenarios retry the focusing click (attempts are in the
+run summaries). Worth a look in the user-in-the-loop pass: does a real mouse ever miss the search icon or a chip?
 
 ## Phase 4 — Skill filter, sorting, reset (spec §4)
 
