@@ -305,8 +305,8 @@ the intended scenario). `tools/palette-check.py`: 96/96 checks (rerun 2026-11-15
 - [x] Rebuilt package in `dist/ColonyCommand` with the above (`tools/package.sh`) — the `dist/` built at 03:20 local was stale
       (build `214b083`, before the README commit, without Preview/LICENSE/CHANGELOG). Rebuilt again after the assembly was stamped
       1.0.0: build `a78f8fc.20261115T090827Z`
-- [ ] Release gate (user-approved 2026-11-15): full `autotest.py pkg-run` on the packaged copy — first run on build `55cb0cc`
-      PASSED 30/30 with 0 new errors; re-run on `a78f8fc` pending/running
+- [x] Release gate (user-approved 2026-11-15): full `autotest.py pkg-run` on the packaged copy — run on build `55cb0cc` PASSED
+      30/30 with 0 new errors (2026-11-15 09:07); rerun on the released bits `a78f8fc` PASSED 30/30, 0 new errors (2026-11-15 09:14, 319 s)
 - [x] Steam Workshop publication — **not pursuing** (user, 2026-11-15): the mod is distributed as the packaged
       `dist/ColonyCommand`; no Workshop entry is planned
 - Play-test (user, 2026-11-15, screenshot in chat): the panel works in a live colony — search `robyn` → **All 1**, **Inspired 1**,
