@@ -14,9 +14,8 @@ namespace ColonyCommand
     /// value that has no accessor (<c>cachedScale</c>) is set through reflection resolved once at startup.
     ///
     /// The view is <see cref="RosterView"/> applied to the vanilla entries with the user's <see cref="ViewState"/>; with
-    /// nothing active the bar is not touched at all. The Phase 1 probe (hide every other colonist) is kept as an internal
-    /// test hook until the seam scenarios run against the real view. Everything here is memory only: nothing is saved
-    /// and no game data (pawns, selection, display order) is changed.
+    /// nothing active the bar is not touched at all. Everything here is memory only: nothing is saved and no game data
+    /// (pawns, selection, display order) is changed.
     /// </summary>
     public static class BarAdapter
     {
@@ -29,7 +28,7 @@ namespace ColonyCommand
         private static FieldInfo scaleField;
         private static ColonistBarDrawLocsFinder drawLocsFinder;
         private static readonly List<ColonistBar.Entry> view = new List<ColonistBar.Entry>();
-        private static bool applied, appliedProbe;
+        private static bool applied;
         private static int appliedVersion;
         private static RosterCounts counts;
 
@@ -42,14 +41,8 @@ namespace ColonyCommand
         /// </summary>
         public static RosterCounts Counts => counts;
 
-        /// <summary>Test hook, kept until the seam scenarios move to the real view: hide every other colonist of each group, whatever the criteria. Memory only, off by default.</summary>
-        public static bool ProbeView { get; set; }
-
         /// <summary>Our view is currently written into the bar.</summary>
         public static bool Applied => applied;
-
-        /// <summary>The probe's rule: keep the colonists at even positions of their group (vanilla order), hide the rest.</summary>
-        public static bool ProbeKeeps(int indexInGroup) => indexInGroup % 2 == 0;
 
         private const string ScaleFieldName = "cachedScale";
 
@@ -95,8 +88,7 @@ namespace ColonyCommand
             ColonistBar bar = Find.ColonistBar;
             Criteria criteria = ViewState.Snapshot;
             int version = ViewState.Version;
-            bool probe = ProbeView;
-            if (!probe && criteria.IsIdentity)
+            if (criteria.IsIdentity)
             {
                 if (applied)
                 {
@@ -107,24 +99,15 @@ namespace ColonyCommand
                 return;
             }
             // Built from this very request? Then only a vanilla rebuild (a list that is no longer ours) needs repairing.
-            bool upToDate = applied && appliedProbe == probe && appliedVersion == version;
+            bool upToDate = applied && appliedVersion == version;
             if (!upToDate)
                 bar.MarkColonistsDirty();   // start from a fresh vanilla cache (this also resets its reorder groups)
             List<ColonistBar.Entry> entries = bar.Entries;   // vanilla recaches here when it was marked dirty
             if (upToDate && IsView(entries))
                 return;
-            int groups;
-            if (probe)
-            {
-                groups = BuildProbe(entries);
-                counts = default;
-            }
-            else
-            {
-                groups = RosterView.Build(entries, criteria, view, out counts);
-                for (int i = 0; i < view.Count; i++)
-                    view[i] = Stamp(view[i]);
-            }
+            int groups = RosterView.Build(entries, criteria, view, out counts);
+            for (int i = 0; i < view.Count; i++)
+                view[i] = Stamp(view[i]);
             entries.Clear();
             entries.AddRange(view);
             view.Clear();   // keep no pawn references between calls
@@ -132,7 +115,6 @@ namespace ColonyCommand
             drawLocsFinder.CalculateDrawLocs(bar.DrawLocs, out float scale, groups);
             scaleField.SetValue(bar, scale);
             applied = true;
-            appliedProbe = probe;
             appliedVersion = version;
         }
 
@@ -153,34 +135,6 @@ namespace ColonyCommand
                     return false;
             }
             return true;
-        }
-
-        /// <summary>
-        /// Fills <see cref="view"/> with the Phase 1 probe's view and returns the group count. Groups that lose every
-        /// entry vanish and the rest are renumbered from 0: the layout indexes its per-group arrays by group id.
-        /// </summary>
-        private static int BuildProbe(List<ColonistBar.Entry> source)
-        {
-            view.Clear();
-            int sourceGroup = -1, position = 0, lastKeptSource = -1, group = -1;
-            for (int i = 0; i < source.Count; i++)
-            {
-                ColonistBar.Entry entry = source[i];
-                if (entry.group != sourceGroup)
-                {
-                    sourceGroup = entry.group;
-                    position = 0;
-                }
-                if (entry.pawn != null && !ProbeKeeps(position++))
-                    continue;
-                if (entry.group != lastKeptSource)
-                {
-                    lastKeptSource = entry.group;
-                    group++;
-                }
-                view.Add(Stamp(new ColonistBar.Entry(entry.pawn, entry.map, group)));
-            }
-            return group + 1;
         }
 
         /// <summary>Fails closed: logs once, stops touching the bar for good, and hands it back to vanilla.</summary>

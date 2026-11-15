@@ -8,8 +8,8 @@ using Verse;
 
 namespace ColonyCommandTests
 {
-    // Phase 1: does the zero-dependency seam hold? Every scenario below turns the probe view on (hide every other
-    // colonist) and attacks the way it could break. The probe (BarProbe) reads what the vanilla bar actually iterates on
+    // Phase 1: does the zero-dependency seam hold? Every scenario below turns a real view on (a name query that keeps only
+    // the fixture colonists and hides the map's own) and attacks the way it could break. The probe (BarProbe) reads what the vanilla bar actually iterates on
     // each OnGUI event, so "no flash" is judged on what was drawn, not on what the mod believes it wrote.
     public static partial class Scenarios
     {
@@ -27,14 +27,17 @@ namespace ColonyCommandTests
 
         // ----------------------------------------------------------------------------------------- shared steps
 
-        /// <summary>Colonists-only fixtures, probe off, vanilla roster captured. The scenario leaves the probe off.</summary>
+        /// <summary>The query every Seam view uses: all fixture colonists (last name "Fixture") stay, the map's own colonists are hidden.</summary>
+        private const string SeamQuery = "Fixture";
+
+        /// <summary>Colonists-only fixtures, no criteria, vanilla roster captured. The scenario leaves the view state reset.</summary>
         private static Roster Prelude(Scenario s, int colonists)
         {
             var r = new Roster();
             Fixtures.EnsureColonists(s, colonists);
             s.OnFinish(() =>
             {
-                BarAdapter.ProbeView = false;
+                ViewState.Reset();
                 BarProbe.Stop();
             }).Summary(() => string.Join("; ", r.Notes.Append(r.Last).Where(x => x.Length > 0)));
             CaptureSteps(s, r, colonists);
@@ -43,42 +46,37 @@ namespace ColonyCommandTests
 
         private static void CaptureSteps(Scenario s, Roster r, int pawns)
         {
-            s.Do("probe off", () => BarAdapter.ProbeView = false)
+            s.Do("no criteria", () => ViewState.Reset())
                 .ExpectWithin($"the vanilla roster of {pawns} colonists is captured", 20, () => CaptureVanilla(r, pawns), () => r.Last);
         }
 
         private static void ViewOnSteps(Scenario s, Roster r)
         {
-            s.Do("probe on", () =>
+            s.Do("view on", () =>
                 {
                     BarProbe.Start();
-                    BarAdapter.ProbeView = true;
+                    ViewState.Query = SeamQuery;
                 })
                 .ExpectWithin("the bar holds exactly the expected view", 20, () => ViewInPlace(r), () => r.Last);
         }
 
         // ------------------------------------------------------------------------------------------- the oracle
 
-        /// <summary>The probe rule (even positions of each group stay), restated independently of BarAdapter.</summary>
+        /// <summary>The view the Seam query must produce, restated independently of RosterView: the fixture colonists in vanilla order, groups renumbered, placeholders gone.</summary>
         private static string ExpectedView(List<ColonistBar.Entry> vanilla)
         {
             var parts = new List<string>();
-            int sourceGroup = -1, position = 0, lastKept = -1, group = -1;
+            int lastKept = -1, group = -1;
             foreach (ColonistBar.Entry e in vanilla)
             {
-                if (e.group != sourceGroup)
-                {
-                    sourceGroup = e.group;
-                    position = 0;
-                }
-                if (e.pawn != null && !BarAdapter.ProbeKeeps(position++))
+                if (e.pawn == null || !Oracle.Name(e.pawn, SeamQuery))
                     continue;
                 if (e.group != lastKept)
                 {
                     lastKept = e.group;
                     group++;
                 }
-                parts.Add($"{group}:{e.pawn?.ThingID ?? "-"}");
+                parts.Add($"{group}:{e.pawn.ThingID}");
             }
             return string.Join(",", parts);
         }
@@ -190,14 +188,14 @@ namespace ColonyCommandTests
 
         // ----------------------------------------------------------------------------------------------- scenarios
 
-        // Precondition: quicktest map, 5 colonists, probe off. Trigger: probe on, then off.
+        // Precondition: quicktest map, 6 colonists (3 of them fixtures), no criteria. Trigger: the Seam query on, then off.
         // Failure modes: the view is not written, or written inconsistently (draw locations not matching entries make the
         // vanilla draw loop throw an IndexOutOfRange), portraits keep the vanilla layout, a hidden colonist is drawn, the
         // vanilla roster does not come back, or what is drawn differs from what the lists say.
         private static void SeamView()
         {
             var s = new Scenario("Seam view", 400000);
-            Roster r = Prelude(s, 5);
+            Roster r = Prelude(s, 6);
             ViewOnSteps(s, r);
             s.Do("the relayout reached the bar: portraits are bigger than in the vanilla layout", () =>
                 {
@@ -208,10 +206,10 @@ namespace ColonyCommandTests
                 })
                 .ExpectWithin("20 repaints drawn", 30, () => BarProbe.Repaints >= 20, () => $"{BarProbe.Repaints} so far")
                 .Do("every draw showed exactly the view", () => AssertDraws("view on", r.Expected, 20))
-                .Do("probe off", () =>
+                .Do("view off", () =>
                 {
                     BarProbe.Start();
-                    BarAdapter.ProbeView = false;
+                    ViewState.Reset();
                 })
                 .ExpectWithin("the vanilla roster, order and layout are back", 20, () => VanillaBack(r), () => r.Last)
                 .ExpectWithin("20 repaints drawn", 30, () => BarProbe.Repaints >= 20, () => $"{BarProbe.Repaints} so far")
@@ -228,7 +226,7 @@ namespace ColonyCommandTests
         private static void SeamDirty()
         {
             var s = new Scenario("Seam dirty", 600000);
-            Roster r = Prelude(s, 5);
+            Roster r = Prelude(s, 6);
             ViewOnSteps(s, r);
             DirtyPhase(s, r, "control, no hooks", 40, lateUpdate: false, windowHooks: false, dirtyInUpdate: true, dirtyAfterRepaint: false, bad =>
             {
@@ -289,7 +287,7 @@ namespace ColonyCommandTests
         private static void SeamHitTest()
         {
             var s = new Scenario("Seam hit test", 600000);
-            Roster r = Prelude(s, 5);
+            Roster r = Prelude(s, 6);
             ViewOnSteps(s, r);
             s.Do("hit tests: every slot centre is its own colonist, hidden colonists are unreachable", () => HitSweep(r));
             int slots = 0;
@@ -374,7 +372,7 @@ namespace ColonyCommandTests
         private static void SeamReorder()
         {
             var s = new Scenario("Seam reorder", 600000);
-            Roster r = Prelude(s, 5);
+            Roster r = Prelude(s, 6);
             Dictionary<Pawn, int> orders = null;
             s.Do("remember every display order, restore them when the scenario ends", () =>
             {

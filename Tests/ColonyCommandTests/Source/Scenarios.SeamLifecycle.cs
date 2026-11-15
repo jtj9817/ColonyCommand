@@ -70,7 +70,7 @@ namespace ColonyCommandTests
         private static void SeamNoSaveData()
         {
             var s = new Scenario("Seam no save data", 600000);
-            Roster r = Prelude(s, 5);
+            Roster r = Prelude(s, 6);
             ViewOnSteps(s, r);
             s.Do("save", () => GameDataSaveLoader.SaveGame(Scenario.SaveName))
                 .Do("the save holds nothing of the mod outside the mod list", () =>
@@ -99,7 +99,7 @@ namespace ColonyCommandTests
         private static void SeamFailClosed()
         {
             var s = new Scenario("Seam fail closed", 600000);
-            Roster r = Prelude(s, 5);
+            Roster r = Prelude(s, 6);
             s.OnFinish(() =>
             {
                 ErrorCapture.Stop();
@@ -118,7 +118,7 @@ namespace ColonyCommandTests
                 .Do("1: switching the view on again changes nothing", () =>
                 {
                     BarProbe.Start();
-                    BarAdapter.ProbeView = true;
+                    ViewState.Query = ViewState.Query + " ";   // the same criteria, requested again (the version changes)
                 })
                 .WaitFrames(40)
                 .Do("1: still vanilla, still one report", () =>
@@ -176,7 +176,7 @@ namespace ColonyCommandTests
         private static void SeamTopology()
         {
             var s = new Scenario("Seam topology", 600000);
-            Roster r = Prelude(s, 5);
+            Roster r = Prelude(s, 6);
             ViewOnSteps(s, r);
             WorldViewSteps(s, r, "map group only");
 
@@ -199,9 +199,9 @@ namespace ColonyCommandTests
                 }
                 caravan = CaravanMaker.MakeCaravan(members, Faction.OfPlayer, Find.CurrentMap.Tile, addToWorldPawnsIfNotAlready: true);
             });
-            CaptureSteps(s, r, 7);   // 5 on the map, 2 in the caravan
+            CaptureSteps(s, r, 8);   // 6 on the map, 2 in the caravan
             ViewOnSteps(s, r);
-            s.Do("two groups: the caravan group survived with its first member, groups renumbered", () =>
+            s.Do("two groups: the caravan group survived, groups renumbered", () =>
             {
                 if (!r.Expected.Contains(",1:"))
                     throw new InvalidOperationException($"expected a second group in [{r.Expected}]");
@@ -236,7 +236,7 @@ namespace ColonyCommandTests
         private static void SeamMapSwitch()
         {
             var s = new Scenario("Seam map switch", 600000);
-            Roster r = Prelude(s, 5);
+            Roster r = Prelude(s, 6);
             ViewOnSteps(s, r);
             Map home = null, second = null;
             Settlement settlement = null;
@@ -265,9 +265,9 @@ namespace ColonyCommandTests
                     members.Add(p);
                 }
             });
-            CaptureSteps(s, r, 7);
+            CaptureSteps(s, r, 8);
             ViewOnSteps(s, r);
-            s.Do("two groups, one per map; the second map's first colonist is kept", () =>
+            s.Do("two groups, one per map; the second map's colonists are kept", () =>
                 {
                     if (!r.Expected.Contains(",1:"))
                         throw new InvalidOperationException($"expected a second group in [{r.Expected}]");

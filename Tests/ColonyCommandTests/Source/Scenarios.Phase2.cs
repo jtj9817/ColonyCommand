@@ -67,7 +67,6 @@ namespace ColonyCommandTests
             s.OnFinish(() =>
                 {
                     ViewState.Reset();
-                    BarAdapter.ProbeView = false;
                     BarProbe.Stop();
                     IdleProbe.Stop();
                     Find.Selector.ClearSelection();
@@ -82,10 +81,9 @@ namespace ColonyCommandTests
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                     return Find.TickManager.CurTimeSpeed == TimeSpeed.Paused;
                 })
-                .Do("no criteria, probe off, then stage the cast", () =>
+                .Do("no criteria, then stage the cast", () =>
                 {
                     ViewState.Reset();
-                    BarAdapter.ProbeView = false;
                     StageCast(s, c);
                 })
                 .ExpectWithin("the vanilla roster is captured", 20, () => CaptureVanilla(r, 6), () => r.Last)
