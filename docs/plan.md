@@ -147,11 +147,13 @@ Source/ColonyCommand/
   CC.cs                      identity, build id, the one logging helper ([ColonyCommand] tag)
   Startup.cs                 [StaticConstructorOnStartup]: build-id line, resolves reflection once, creates Bootstrap
   Bootstrap.cs               MonoBehaviour: ensures the window is open while Playing; LateUpdate applies the view
-  ViewState.cs               static, memory-only UI state (query, status, skill, min level, sort, direction)
-  RosterView.cs              PURE: (entries, state) → filtered/sorted entries + chip counts (no Unity/GUI)
-  Predicates.cs              PURE-ish: drafted / injured / idle / skill / mood / name over a Pawn
-  BarAdapter.cs              the only code touching ColonistBar: recache, apply view, relayout, reflection
-  ColonyCommandWindow.cs     controls: QuickSearchWidget, chips, Skill + Sort dropdowns (FloatMenu), empty state
+  ViewState.cs               static, memory-only UI state (query, status, skill, min level, sort, direction) + Version; SyncGame
+  Predicates.cs              drafted / injured / idle (the bar's chain) / skill / mood / name over a Pawn
+  RosterView.cs              (entries, Criteria) -> filtered/sorted entries + chip counts; no Unity UI, no Find
+  BarAdapter.cs              the only code touching ColonistBar: recache, apply view, relayout, reflection, 0.25 s refresh
+  ControlsLayout.cs          PURE placement of the controls from the bar's footprint (search field/icon, chip row, empty state)
+  FirstResult.cs             what Enter selects: a click on the first result's portrait, by vanilla's own paths
+  ColonyCommandWindow.cs     the window (rect = the search field) + chip row, Skill/Level/Sort/direction/Reset, empty state, menus
 Languages/English/Keyed/ColonyCommand.xml
 About/About.xml               packageId josh9817.colonycommand, supportedVersions 1.6, no dependencies
 ```

@@ -111,7 +111,7 @@ All proofs: `docs/test-runs.md` rows 2026-11-15 01:08–01:15; evidence and numb
 - [x] **Gate:** if any proof fails → stop and ask the user how to reduce the feature (no Harmony, Q2)
       — **passed, no proof failed; no reduction needed.** The shipped assembly still references no Harmony.
 
-**Next:** Phase 2 (`ViewState`, `Predicates`, `RosterView`; the probe view in `BarAdapter` is replaced by the real one,
+**Next (historical):** Phase 2 (`ViewState`, `Predicates`, `RosterView`; the probe view in `BarAdapter` is replaced by the real one,
 and the `Seam *` scenarios stay as the seam's regression set).
 Hand-off for Phases 2–4 (verified engine facts, spec map, plan of attack, open points):
 [`docs/handoff/20261115-0124-phases-2-to-4.md`](docs/handoff/20261115-0124-phases-2-to-4.md).
@@ -193,11 +193,31 @@ run summaries). Worth a look in the user-in-the-loop pass: does a real mouse eve
 
 ## Phase 4 — Skill filter, sorting, reset (spec §4)
 
-- [ ] Skill dropdown (FloatMenu over `DefDatabase<SkillDef>`) + min level presets Any/0/5/10/15
-- [ ] Sort dropdown: Vanilla / Name / Mood / Selected skill, with direction; Skill sort only when a skill is chosen
-- [ ] Reset control (clears everything back to vanilla view)
+Proof: `docs/test-runs.md` row 2026-11-15 03:38 (clean build `2e11480`, 24/24 PASS) and the mutation check at 03:33.
+
+- [x] Skill dropdown (FloatMenu over `DefDatabase<SkillDef>`) + min level presets Any/0/5/10/15 — `Skill filter`
+- [x] Sort dropdown: Vanilla / Name / Mood / Selected skill, with direction; Skill sort only when a skill is chosen — `Sort controls`
+- [x] Reset control (clears everything back to the vanilla view, drag reorder included) — `Reset control`
+
+Defaults taken in Phase 4 (record; change only if the user says so):
+
+- **Choosing a skill while no level is set opens the level dropdown by itself**; a skill alone (level Any) hides nobody and
+  only feeds the skill sort. "No skill" clears the skill and its level.
+- **A newly chosen sort key starts in its natural direction**: names A-Z, mood and skill high to low (the spec lists
+  High-low first). The direction button shows only while an order is set and reverses it; values that are unavailable are
+  last in both directions.
+- **The row is: chips, Skill, Level (only with a skill), Sort, direction (only while sorting), Reset (only when something is
+  set).** Labels are short so the worst realistic state still fits the 800 px minimum (skill named alone, level as "10+");
+  when it still does not fit the whole row folds into one "Filters..." button whose menu carries the same actions
+  (`FoldedMenuOptions`; its Reset is exercised by `Reset control` through the option, not by clicking the menu entry).
+- **Dropdowns are vanilla `FloatMenu`s**: Escape and a click elsewhere close them as everywhere in the game. Escape was
+  tested (`Skill filter`: it closes the menu, takes the search focus away, chooses nothing and does not reach the main menu);
+  the click-elsewhere close is vanilla's `closeOnClickedOutside` and is not separately tested.
 
 ## Phase 5 — Live refresh and lifecycle (spec §4.4)
+
+Groundwork already in `BarAdapter` (Phase 3): it re-evaluates every 0.25 s real time (counts in identity mode, a rebuild
+of the view otherwise) and never touches the bar while a game loads (`GameReady`). What is missing is the proof.
 
 - [ ] Throttled re-evaluation (~0.25 s real time) for drafted/injured/idle/mood/skill changes
 - [ ] Roster mutation (join, death, leave map), map switch, world view, main menu → no stale pawns
