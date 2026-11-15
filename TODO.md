@@ -240,12 +240,21 @@ Defaults taken in Phase 5 (record; change only if the user says so):
 
 ## Phase 6 — Acceptance and release (spec §6)
 
-- [ ] Scenario `No save data` + `tools/autotest.py removal-check`
-- [ ] Package (`tools/package.sh`); Core-only load check of the package with **no Harmony and no DLC** —
-      user-in-the-loop, because `autotest.py` always loads Harmony
-- [ ] User-in-the-loop: 1280×720, 1920×1080, ultrawide × UI scale 100/125/150 % — screenshots
-- [ ] Error log clean; large-colony responsiveness spot check
-- [ ] Release gate (user-approved)
+- [x] Scenario `No save data` + `tools/autotest.py removal-check` — one scenario, `No save data - Prepare removal`
+      (run 2026-11-15 05:17: body of the save has no trace of the mod after every part of the state was used) and
+      `removal-check` (LOADED CLEAN: no-mod process, 600 ticks, save, reload, 600 ticks, 0 new errors)
+- [x] Package (`tools/package.sh`) — `dist/ColonyCommand` built (4 files, 57 KiB, no Harmony string, no dependency)
+- [ ] **User-in-the-loop:** Core-only load check of the package with **no Harmony and no DLC** (`autotest.py` always loads
+      Harmony): copy `dist/ColonyCommand` into the game's `Mods/`, enable only Core + it, start a colony, confirm the bar,
+      the search field, the chips, Skill/Sort/Reset work and the log (`tools/qblog.sh`) has no `[ColonyCommand]` error
+- [ ] **User-in-the-loop:** 1280×720, 1920×1080, ultrawide × UI scale 100/125/150 % — screenshots (`tools/screenshot.sh`);
+      also the Phase 3 questions: do real clicks ever miss the search icon or a chip, is the gap under a small bar
+      acceptable, does the compact search feel right
+- [x] Large-colony responsiveness spot check — `Large colony` (run 2026-11-15 05:19, clean build `44e2486`): 40 colonists, a
+      rebuild 0.22 ms, a steady-state apply 0.9 us (on the harness instance, not a user-loop frame time)
+- [ ] Error log clean in a **user-loop** session (automated runs so far: 0 new errors in every row of `docs/test-runs.md`)
+- [ ] Release gate (user-approved): a full `autotest.py pkg-run` on the packaged copy, only with the user's explicit
+      approval for this release (AGENTS.md: the sole exception to "no full sequences")
 
 ## Noted, out of scope (spec §6.2)
 
