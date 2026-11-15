@@ -9,7 +9,7 @@ namespace ColonyCommand
         public const string PackageId = "josh9817.colonycommand";
         public const string Tag = "[ColonyCommand]";
 
-        /// <summary>"0.1.0+&lt;build id&gt;": tools/build.sh stamps the id, tools/autotest.py compares it with .devlog/last-build.</summary>
+        /// <summary>"1.0.0+&lt;build id&gt;": tools/build.sh stamps the id, tools/autotest.py compares it with .devlog/last-build.</summary>
         public static readonly string BuildId =
             typeof(CC).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
 
