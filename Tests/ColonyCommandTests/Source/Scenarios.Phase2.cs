@@ -675,13 +675,18 @@ namespace ColonyCommandTests
 
         // Precondition: a view that hides every colonist is in place (a query nobody matches, a status, a skill, a sort).
         // Trigger: save and load the game.
-        // Failure mode: the static ViewState survives the load, so a fresh game shows an empty or filtered bar behind a
-        // blank search field (the controls are rebuilt, the statics are not).
+        // Failure modes: the static ViewState survives the load, so a fresh game shows an empty or filtered bar behind a
+        // blank search field (the controls are rebuilt, the statics are not); the adapter touches the bar while the new game
+        // has no world yet, throws, and switches itself off for the rest of the session.
         private static void ViewResetOnLoad()
         {
             var s = new Scenario("View reset on load", 4000000);
             Roster r = Prelude(s, 5);
-            s.OnFinish(() => ViewState.Reset());
+            s.OnFinish(() =>
+            {
+                ViewState.Reset();
+                ErrorCapture.Stop();
+            });
             s.Do("set a query nobody matches, a status, a skill, a minimum level, a sort and a direction", () =>
                 {
                     ViewState.Query = "zzznomatchzzz";
@@ -692,7 +697,14 @@ namespace ColonyCommandTests
                     ViewState.Descending = true;
                 })
                 .ExpectWithin("the bar is empty behind them", 20, () => BarAdapter.Applied && BarProbe.CachedEntries(Bar).Count == 0 && !BarProbe.IsDirty(Bar), () => $"applied {BarAdapter.Applied}");
+            s.Do("watch what the mod reports across the load", () => ErrorCapture.Start());
             s.SaveAndReload(always: true);
+            s.Do("the load went by without the seam switching itself off or reporting anything (it once did: the bar's own recache threw while the new game had no world yet)", () =>
+            {
+                if (ErrorCapture.Captured.Count > 0)
+                    throw new InvalidOperationException($"the mod reported {ErrorCapture.Captured.Count} error(s) during the load: {ErrorCapture.Captured[0]}");
+            });
+            s.ExpectWithin("the seam is still enabled", 10, () => BarAdapter.Enabled, () => "BarAdapter.Enabled is false");
             s.ExpectWithin("a different game: the state is at its defaults and the bar is the vanilla roster again", 30, () =>
                 {
                     if (ViewState.Query != "" || ViewState.Status != StatusFilter.None || ViewState.Skill != null

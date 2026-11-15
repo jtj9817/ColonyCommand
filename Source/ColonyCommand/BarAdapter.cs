@@ -104,7 +104,7 @@ namespace ColonyCommand
 
         private static void ApplyCore()
         {
-            if (Current.ProgramState != ProgramState.Playing || !(Find.UIRoot is UIRoot_Play))
+            if (!GameReady())
                 return;
             ColonistBar bar = Find.ColonistBar;
             Criteria criteria = ViewState.Snapshot;
@@ -164,6 +164,15 @@ namespace ColonyCommand
             footprint = ControlsLayout.Measure(footprintLocs, ColonistBar.BaseSize * scale, scale, groups);
             footprintLocs.Clear();
         }
+
+        /// <summary>
+        /// A game is being played and is not in the middle of loading. While a game loads in place the new Game object is
+        /// already current but its world is not there yet: the bar's own recache (<c>Find.WorldObjects</c>) throws, which
+        /// would switch the seam off for the rest of the session. Nothing to do until the load is over.
+        /// </summary>
+        private static bool GameReady() =>
+            Current.ProgramState == ProgramState.Playing && !LongEventHandler.ShouldWaitForEvent
+            && Current.Game != null && Current.Game.World != null && Find.UIRoot is UIRoot_Play;
 
         /// <summary>Marks an entry as ours (see <see cref="IsView"/>) and turns its drag into a no-op.</summary>
         private static ColonistBar.Entry Stamp(ColonistBar.Entry entry)
