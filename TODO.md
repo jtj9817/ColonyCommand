@@ -3,13 +3,16 @@
 Plan and verified engine facts: [`docs/plan.md`](docs/plan.md). Spec: `Colony_Command_Specs.docx`.
 A box is ticked only when proven (build, scenario run named in `docs/test-runs.md`, or user check).
 
-## Open decisions (blocking — ask the user)
+## Decisions (user, 2026-11-14)
 
-- [ ] **Q1 Test driver vs. Harmony** — `tools/game-side/AutoTest.cs` uses a Harmony patch and `autotest.py`
-      always loads `brrainz.harmony`. How to keep the release DLL Harmony-free?
-- [ ] **Q2 Integration path** — native (in-place view over `ColonistBar.Entries`, plan §1.2) vs. Harmony postfix.
-- [ ] **Q3 Injured predicate** — which definition of "injured".
-- [ ] **Q4 Idle predicate** — raw `mindState.IsIdle` vs. exactly the bar's idle icon.
+- [x] **Q1 Test driver** — separate **test-only mod** (`Tests/ColonyCommandTests/`: adapted `AutoTest.cs` +
+      scenarios + fixtures, references Harmony and the main assembly), loaded only by autotest runs via
+      `MOD_EXTRA_MODS`. The shipped `ColonyCommand.dll` never references Harmony.
+- [x] **Q2 Integration** — **native only**. No Harmony in the mod under any circumstances; if the Phase 1
+      proof fails, reduce the feature instead (and ask how).
+- [x] **Q3 Injured** — `health.hediffSet.HasNaturallyHealingInjury()` (any non-permanent injury).
+- [x] **Q4 Idle** — exactly the bar's idle icon condition (`ColonistBarColonistDrawer`): `mindState.IsIdle`,
+      `GenDate.DaysPassed >= 1`, not drafted, not fleeing/attacking, not in a mental state.
 
 Defaults taken unless told otherwise: sorting is per group (map/caravan); next/prev-colonist hotkeys and
 drag-box selection follow the filtered view (they read the same list); drag-reorder disabled while a
@@ -19,10 +22,12 @@ filter/sort is active; skill presets Any/0/5/10/15; packageId `josh9817.colonyco
 
 - [x] git init, adopt modding-center `tools/` + docs, `.gitignore`, `AGENTS.md` (testing rule) — first commit
 - [x] Formal plan (`docs/plan.md`) and this TODO
-- [ ] Resolve Q1–Q4
+- [x] Resolve Q1–Q4
 - [ ] `tools/vanilla.sh init` in this repo (decompiled source under `.tools/`)
 - [ ] Mod skeleton: `About/About.xml` (1.6, no dependencies), `Source/ColonyCommand/ColonyCommand.csproj`
       (`net472`, `Krafs.Rimworld.Ref 1.6.4871`, no Harmony reference), empty `Mod` class; `tools/build.sh` passes
+- [ ] Test-only mod skeleton `Tests/ColonyCommandTests/` (adapted `AutoTest.cs`, Harmony ref) wired through
+      `MOD_EXTRA_MODS`; check how `autotest.py`/`build.sh` must build it (tooling change → port rule)
 - [ ] `docs/test-runs.md`; `tools/autotest.py baseline`
 
 ## Phase 1 — Prove the zero-dependency seam (spec §6.1 step 1) — go/no-go gate
@@ -33,7 +38,7 @@ filter/sort is active; skill presets Any/0/5/10/15; packageId `josh9817.colonyco
 - [ ] Prove: no full-roster flash after a dirty; click/hit-test lands on the visible pawn; drag reorder is a no-op;
       `displayOrder` unchanged; no errors on map switch / world view / caravan group
 - [ ] Prove no save data: saved file contains no `ColonyCommand` text
-- [ ] **Gate:** if any proof fails → stop and ask the user (Harmony fallback needs a scope change)
+- [ ] **Gate:** if any proof fails → stop and ask the user how to reduce the feature (no Harmony, Q2)
 
 ## Phase 2 — Roster snapshot and predicates (spec §3, §4)
 
@@ -67,7 +72,8 @@ filter/sort is active; skill presets Any/0/5/10/15; packageId `josh9817.colonyco
 ## Phase 6 — Acceptance and release (spec §6)
 
 - [ ] Scenario `No save data` + `tools/autotest.py removal-check`
-- [ ] Package (`tools/package.sh`); Core-only load check of the package (no Harmony, no DLC)
+- [ ] Package (`tools/package.sh`); Core-only load check of the package with **no Harmony and no DLC** —
+      user-in-the-loop, because `autotest.py` always loads Harmony
 - [ ] User-in-the-loop: 1280×720, 1920×1080, ultrawide × UI scale 100/125/150 % — screenshots
 - [ ] Error log clean; large-colony responsiveness spot check
 - [ ] Release gate (user-approved)

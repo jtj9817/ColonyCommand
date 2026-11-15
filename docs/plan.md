@@ -47,8 +47,8 @@ MapComponent OnGUI do, but both are **serialized into the save** — `Game.Expos
 - Re-application is cheap when nothing changed: compare a signature (dirty flag observed via the list
   having been rebuilt, criteria version, a ~0.25 s real-time refresh for live state such as drafted/injured).
 
-**Fallback (only if the [verify] items fail):** Harmony postfix on `ColonistBar.CheckRecacheEntries`. That adds
-the Harmony mod as a dependency, which the spec forbids without an explicit scope change — ask the user first.
+**No Harmony fallback (user decision Q2).** If the [verify] items fail, the feature is reduced instead (to be
+agreed with the user), never patched with Harmony.
 
 ### 1.3 Controls: a vanilla Window, nothing saved
 
@@ -71,8 +71,8 @@ the Harmony mod as a dependency, which the spec forbids without an explicit scop
 | Criterion | Source | Open question |
 | --- | --- | --- |
 | Drafted | `pawn.Drafted` | — |
-| Injured | candidates: `health.hediffSet.HasNaturallyHealingInjury()` (any non-permanent injury) / `HealthAIUtility.ShouldSeekMedicalRest(pawn)` (bar's medical-rest icon) / tendable injuries | **Q3** |
-| Idle | `pawn.mindState.IsIdle` (false when downed or unspawned; `lastJobTag == JobTag.Idle`). The bar's idle icon also requires `GenDate.DaysPassed >= 1` and not drafted/fleeing/attacking | **Q4** |
+| Injured | `health.hediffSet.HasNaturallyHealingInjury()` — any non-permanent injury (Q3) | — |
+| Idle | exactly the bar's idle-icon branch in `ColonistBarColonistDrawer` (Q4): `mindState.IsIdle` (not downed, spawned, `lastJobTag == JobTag.Idle`) + `GenDate.DaysPassed >= 1`, and none of the higher-priority icon states (mental state, drafted/fleeing/attacking) | Re-read the drawer's full branch when implementing |
 | Skill ≥ N | `pawn.skills?.GetSkill(def)`; unavailable when `skills == null` or `TotallyDisabled` → excluded from filter, sorted last | — |
 | Mood | `pawn.needs?.mood?.CurLevelPercentage`; null (e.g. corpse, subhuman) → sorted last | — |
 | Name | `pawn.LabelShort`, `Name` as `NameTriple` (First/Nick/Last) or `NameSingle`; trimmed, `OrdinalIgnoreCase` substring | — |
@@ -117,6 +117,10 @@ skill levels, a mood offset (thought/need level). No rooms, power, items or anim
 | `Live refresh` | draft/injure/kill a fixture colonist → counts and view update without reopening |
 | `No save data` | save after use contains no `ColonyCommand` string; reload resets state |
 | `Core-only load` | release package loads with Core only, no missing-dependency errors (pkg-run / user check) |
+
+Test code lives in a **separate test-only mod** (`Tests/ColonyCommandTests/`, Q1) loaded via `MOD_EXTRA_MODS`;
+it carries the Harmony-using `AutoTest.cs` so the shipped DLL never references Harmony. The Core-only/no-Harmony
+load check is user-in-the-loop, since `autotest.py` always loads Harmony.
 
 `RosterView` is pure, so the matching/sort/count logic is asserted in-game via the scenario driver against
 fixture pawns rather than a separate unit-test project (no test framework dependency).
