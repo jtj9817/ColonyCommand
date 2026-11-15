@@ -13,8 +13,10 @@ namespace ColonyCommand
     /// is rewritten in place, laid out again with our own <see cref="ColonistBarDrawLocsFinder"/>, and the one private
     /// value that has no accessor (<c>cachedScale</c>) is set through reflection resolved once at startup.
     ///
-    /// Phase 1 (go/no-go for the seam): the view is a fixed probe that hides every other colonist, off until switched on.
-    /// Everything here is memory only: nothing is saved and no game data (pawns, selection, display order) is changed.
+    /// The view is <see cref="RosterView"/> applied to the vanilla entries with the user's <see cref="ViewState"/>; with
+    /// nothing active the bar is not touched at all. The Phase 1 probe (hide every other colonist) is kept as an internal
+    /// test hook until the seam scenarios run against the real view. Everything here is memory only: nothing is saved
+    /// and no game data (pawns, selection, display order) is changed.
     /// </summary>
     public static class BarAdapter
     {
@@ -27,12 +29,20 @@ namespace ColonyCommand
         private static FieldInfo scaleField;
         private static ColonistBarDrawLocsFinder drawLocsFinder;
         private static readonly List<ColonistBar.Entry> view = new List<ColonistBar.Entry>();
-        private static bool applied;
+        private static bool applied, appliedProbe;
+        private static int appliedVersion;
+        private static RosterCounts counts;
 
         /// <summary>False when the private member this relies on is missing (one logged error, then the bar stays vanilla).</summary>
         public static bool Enabled { get; private set; }
 
-        /// <summary>Phase 1 probe switch: hide every other colonist of each group. Memory only, off by default.</summary>
+        /// <summary>
+        /// Chip counts from the vanilla roster the current view was built from (spec §3.2: before the active status and
+        /// skill criteria). Default (all zero) while no view has been built.
+        /// </summary>
+        public static RosterCounts Counts => counts;
+
+        /// <summary>Test hook, kept until the seam scenarios move to the real view: hide every other colonist of each group, whatever the criteria. Memory only, off by default.</summary>
         public static bool ProbeView { get; set; }
 
         /// <summary>Our view is currently written into the bar.</summary>
@@ -63,6 +73,8 @@ namespace ColonyCommand
         /// </summary>
         public static void Apply()
         {
+            // First, and whether or not the seam is enabled: a stale search must not survive into another game.
+            ViewState.SyncGame();
             if (!Enabled)
                 return;
             try
@@ -81,21 +93,38 @@ namespace ColonyCommand
             if (Current.ProgramState != ProgramState.Playing || !(Find.UIRoot is UIRoot_Play))
                 return;
             ColonistBar bar = Find.ColonistBar;
-            if (!ProbeView)
+            Criteria criteria = ViewState.Snapshot;
+            int version = ViewState.Version;
+            bool probe = ProbeView;
+            if (!probe && criteria.IsIdentity)
             {
                 if (applied)
                 {
                     applied = false;
+                    counts = default;
                     bar.MarkColonistsDirty();   // vanilla rebuilds the roster and the layout on its next read
                 }
                 return;
             }
-            if (!applied)
+            // Built from this very request? Then only a vanilla rebuild (a list that is no longer ours) needs repairing.
+            bool upToDate = applied && appliedProbe == probe && appliedVersion == version;
+            if (!upToDate)
                 bar.MarkColonistsDirty();   // start from a fresh vanilla cache (this also resets its reorder groups)
             List<ColonistBar.Entry> entries = bar.Entries;   // vanilla recaches here when it was marked dirty
-            if (applied && IsView(entries))
+            if (upToDate && IsView(entries))
                 return;
-            int groups = BuildView(entries);
+            int groups;
+            if (probe)
+            {
+                groups = BuildProbe(entries);
+                counts = default;
+            }
+            else
+            {
+                groups = RosterView.Build(entries, criteria, view, out counts);
+                for (int i = 0; i < view.Count; i++)
+                    view[i] = Stamp(view[i]);
+            }
             entries.Clear();
             entries.AddRange(view);
             view.Clear();   // keep no pawn references between calls
@@ -103,6 +132,16 @@ namespace ColonyCommand
             drawLocsFinder.CalculateDrawLocs(bar.DrawLocs, out float scale, groups);
             scaleField.SetValue(bar, scale);
             applied = true;
+            appliedProbe = probe;
+            appliedVersion = version;
+        }
+
+        /// <summary>Marks an entry as ours (see <see cref="IsView"/>) and turns its drag into a no-op.</summary>
+        private static ColonistBar.Entry Stamp(ColonistBar.Entry entry)
+        {
+            entry.reorderAction = NoReorder;
+            entry.extraDraggedItemOnGUI = NoDragGhost;
+            return entry;
         }
 
         /// <summary>True when every entry is one of ours (an empty list has nothing to hide, so it counts).</summary>
@@ -117,10 +156,10 @@ namespace ColonyCommand
         }
 
         /// <summary>
-        /// Fills <see cref="view"/> from vanilla's entries and returns the group count. Groups that lose every entry
-        /// vanish and the rest are renumbered from 0: the layout indexes its per-group arrays by group id.
+        /// Fills <see cref="view"/> with the Phase 1 probe's view and returns the group count. Groups that lose every
+        /// entry vanish and the rest are renumbered from 0: the layout indexes its per-group arrays by group id.
         /// </summary>
-        private static int BuildView(List<ColonistBar.Entry> source)
+        private static int BuildProbe(List<ColonistBar.Entry> source)
         {
             view.Clear();
             int sourceGroup = -1, position = 0, lastKeptSource = -1, group = -1;
@@ -139,10 +178,7 @@ namespace ColonyCommand
                     lastKeptSource = entry.group;
                     group++;
                 }
-                ColonistBar.Entry kept = new ColonistBar.Entry(entry.pawn, entry.map, group);
-                kept.reorderAction = NoReorder;
-                kept.extraDraggedItemOnGUI = NoDragGhost;
-                view.Add(kept);
+                view.Add(Stamp(new ColonistBar.Entry(entry.pawn, entry.map, group)));
             }
             return group + 1;
         }
@@ -152,6 +188,7 @@ namespace ColonyCommand
         {
             Enabled = false;
             applied = false;
+            counts = default;
             view.Clear();
             CC.Error(error);
             try
