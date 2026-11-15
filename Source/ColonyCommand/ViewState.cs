@@ -162,6 +162,16 @@ namespace ColonyCommand
             Descending = descending,
         };
 
+        /// <summary>
+        /// The "All" chip (spec §3.2): drops the status and the skill criterion and keeps the name search. The chosen
+        /// skill stays (it only feeds the skill sort) and its minimum level goes back to "Any".
+        /// </summary>
+        public static void ClearStatusAndSkill()
+        {
+            Status = StatusFilter.None;
+            MinLevel = AnyLevel;
+        }
+
         /// <summary>True when anything differs from the defaults (the Reset control is useful).</summary>
         public static bool AnythingSet => query.Length > 0 || status != StatusFilter.None || skill != null
             || minLevel != AnyLevel || sort != SortKey.Vanilla || descending;

@@ -23,6 +23,12 @@ namespace ColonyCommandTests
             ("Seam map switch", SeamMapSwitch),
             ("Seam no save data", SeamNoSaveData),
             ("Seam fail closed", SeamFailClosed),
+            ("Name search", NameSearch),
+            ("Status chips", StatusChips),
+            ("Combined filter", CombinedFilter),
+            ("Sort and restore", SortAndRestore),
+            ("Bar integrity", BarIntegrity),
+            ("View reset on load", ViewResetOnLoad),
         };
 
         /// <summary>

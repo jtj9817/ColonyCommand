@@ -347,6 +347,7 @@ namespace ColonyCommandTests
             Pawn target = null;
             s.Do($"click the portrait in slot {slot}", () =>
                 {
+                    Messages.Clear();   // a message is a window over the bar and swallows real input beneath it
                     ColonistBar bar = Bar;
                     target = BarProbe.CachedEntries(bar)[slot].pawn;
                     Vector2 c = BarProbe.CachedLocs(bar)[slot] + bar.Size / 2f;
@@ -430,19 +431,24 @@ namespace ColonyCommandTests
                 .Start();
         }
 
-        private static void DragStep(Scenario s, string label, int fromSlot, int toSlot)
+        private static void DragStep(Scenario s, string label, int fromSlot, int toSlot, Action sample = null)
         {
             System.Diagnostics.Process process = null;
             s.Do($"{label}: right-drag slot {fromSlot} to slot {toSlot}", () =>
                 {
                     BarProbe.Start();
+                    Messages.Clear();   // a message is a window over the bar and swallows real input beneath it
                     ColonistBar bar = Bar;
                     List<Vector2> locs = BarProbe.CachedLocs(bar);
                     Vector2 a = locs[fromSlot] + bar.Size / 2f, b = locs[toSlot] + bar.Size / 2f;
                     process = Xdo.Start($"mousemove --sync {(int)a.x} {(int)a.y} sleep 0.2 mousedown 3 sleep 0.3 " +
                         $"mousemove --sync {(int)((a.x + b.x) / 2f)} {(int)a.y} sleep 0.3 mousemove --sync {(int)b.x} {(int)b.y} sleep 0.4 mouseup 3");
                 })
-                .ExpectWithin($"{label}: xdotool finished", 20, () => process.HasExited)
+                .ExpectWithin($"{label}: xdotool finished", 20, () =>
+                {
+                    sample?.Invoke();
+                    return process.HasExited;
+                })
                 .Do($"{label}: xdotool succeeded", () => Xdo.Check(process))
                 .WaitFrames(15);
         }
