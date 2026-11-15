@@ -83,6 +83,13 @@ namespace ColonyCommand
             return pawn.mindState != null && pawn.mindState.IsIdle && GenDate.DaysPassed >= 1;
         }
 
+        /// <summary>
+        /// Exactly the bar's inspiration icon: <c>ColonistBarColonistDrawer.DrawIcons</c> adds <c>Icon_Inspired</c> when
+        /// <c>colonist.Inspired</c> (<c>Pawn.Inspired</c>: not dead, has an inspiration handler, and the handler holds an
+        /// inspiration). It is its own icon, not a branch of the idle chain, so an inspired colonist can also be Idle or Drafted.
+        /// </summary>
+        public static bool Inspired(Pawn pawn) => pawn.Inspired;
+
         /// <summary>The pawn's current level in <paramref name="skill"/>, or -1 when unavailable (no skills, dead, or the skill is totally disabled for them).</summary>
         public static int SkillLevel(Pawn pawn, SkillDef skill)
         {

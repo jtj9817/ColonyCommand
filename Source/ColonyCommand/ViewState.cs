@@ -10,6 +10,7 @@ namespace ColonyCommand
         Drafted,
         Injured,
         Idle,
+        Inspired,
     }
 
     /// <summary>Spec §4.2. <c>Vanilla</c> is the default and leaves the bar's own order alone.</summary>

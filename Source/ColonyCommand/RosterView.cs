@@ -15,7 +15,7 @@ namespace ColonyCommand
         public int Eligible;
         /// <summary>Eligible pawns matching the name query: the count behind the "All" chip.</summary>
         public int All;
-        public int Drafted, Injured, Idle;
+        public int Drafted, Injured, Idle, Inspired;
     }
 
     /// <summary>
@@ -72,9 +72,9 @@ namespace ColonyCommand
                             rows.Add(new Row { Entry = entry, Index = i });
                         continue;
                     }
-                    if (!Tally(pawn, criteria.Query, ref counts, out bool drafted, out bool injured, out bool idle))
+                    if (!Tally(pawn, criteria.Query, ref counts, out Flags flags))
                         continue;
-                    if (!StatusPasses(criteria.Status, drafted, injured, idle))
+                    if (!StatusPasses(criteria.Status, flags))
                         continue;
                     int skill = needSkill ? Predicates.SkillLevel(pawn, criteria.Skill) : 0;
                     if (criteria.HasSkillCriterion && (skill < 0 || skill < criteria.MinLevel))
@@ -117,38 +117,48 @@ namespace ColonyCommand
             for (int i = 0; i < vanilla.Count; i++)
             {
                 if (vanilla[i].pawn != null)
-                    Tally(vanilla[i].pawn, trimmedQuery, ref counts, out _, out _, out _);
+                    Tally(vanilla[i].pawn, trimmedQuery, ref counts, out _);
             }
             return counts;
         }
 
-        /// <summary>Counts one pawn (spec §3.2: eligible, then name-matching, then each chip) and hands back its status flags.</summary>
-        private static bool Tally(Pawn pawn, string query, ref RosterCounts counts, out bool drafted, out bool injured, out bool idle)
+        /// <summary>What the status chips ask of one pawn.</summary>
+        private struct Flags
         {
-            drafted = injured = idle = false;
+            public bool Drafted, Injured, Idle, Inspired;
+        }
+
+        /// <summary>Counts one pawn (spec §3.2: eligible, then name-matching, then each chip) and hands back its status flags.</summary>
+        private static bool Tally(Pawn pawn, string query, ref RosterCounts counts, out Flags flags)
+        {
+            flags = default;
             counts.Eligible++;
             if (!Predicates.NameMatches(pawn, query))
                 return false;
             counts.All++;
-            drafted = Predicates.Drafted(pawn);
-            injured = Predicates.Injured(pawn);
-            idle = Predicates.Idle(pawn);
-            if (drafted)
+            flags.Drafted = Predicates.Drafted(pawn);
+            flags.Injured = Predicates.Injured(pawn);
+            flags.Idle = Predicates.Idle(pawn);
+            flags.Inspired = Predicates.Inspired(pawn);
+            if (flags.Drafted)
                 counts.Drafted++;
-            if (injured)
+            if (flags.Injured)
                 counts.Injured++;
-            if (idle)
+            if (flags.Idle)
                 counts.Idle++;
+            if (flags.Inspired)
+                counts.Inspired++;
             return true;
         }
 
-        private static bool StatusPasses(StatusFilter status, bool drafted, bool injured, bool idle)
+        private static bool StatusPasses(StatusFilter status, Flags flags)
         {
             switch (status)
             {
-                case StatusFilter.Drafted: return drafted;
-                case StatusFilter.Injured: return injured;
-                case StatusFilter.Idle: return idle;
+                case StatusFilter.Drafted: return flags.Drafted;
+                case StatusFilter.Injured: return flags.Injured;
+                case StatusFilter.Idle: return flags.Idle;
+                case StatusFilter.Inspired: return flags.Inspired;
                 default: return true;
             }
         }
