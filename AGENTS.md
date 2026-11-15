@@ -58,7 +58,7 @@ flowchart LR
 ```bash
 tools/vanilla.sh grep <regex>                    # look up vanilla source + Core Defs BEFORE writing engine code
 tools/vanilla.sh def <defName>                   # a Core def with its ParentName chain
-tools/build.sh                                   # lint → dotnet build → 1.6/Assemblies (build id in .devlog/last-build)
+tools/build.sh                                   # lint → dotnet build (+ the test-only mod, Tests/) → 1.6/Assemblies (build id in .devlog/last-build)
 tools/autotest.py run "<exact scenario names>"   # build + isolated instance + ONLY the named scenarios + log diff
 tools/autotest.py baseline                       # error signatures without the mod (once per environment)
 tools/autotest.py stop                           # end the test instance
@@ -69,8 +69,11 @@ tools/screenshot.sh [label]                      # game window only
 git -c safe.directory="$PWD" <cmd>               # mount is root-owned: always pass safe.directory
 ```
 
-`autotest.py` needs `MOD_NAME`/`MOD_ID` exported when called directly (shell tools get them from `env.sh`);
-global options go before the subcommand; exit codes 0 pass · 1 fail · 2 hang/crash/timeout · 3 env broken.
+`autotest.py` needs `MOD_NAME`/`MOD_ID` exported when called directly (shell tools get them from `env.sh`):
+`source tools/env.sh && tools/autotest.py run "<names>"` does that. It loads the test-only mod by convention
+(`MOD_EXTRA_MODS` defaults to `<MOD_ID>tests`, linked into the game's `Mods/` on first use) and the test window is
+800x500 (`MOD_SCREEN`): vanilla hides the colonist bar below that, so a smaller window can't test it.
+Global options go before the subcommand; exit codes 0 pass · 1 fail · 2 hang/crash/timeout · 3 env broken.
 Steam must be running (workshop Harmony loads only then); the harness always loads Harmony, which the test mod
 may use.
 

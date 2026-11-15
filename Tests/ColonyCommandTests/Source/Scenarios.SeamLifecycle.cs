@@ -91,6 +91,84 @@ namespace ColonyCommandTests
                 .Start();
         }
 
+        // Precondition: view in place. Trigger, twice: (1) a game update removed the private member the seam reflects on,
+        // simulated by resolving against a name that does not exist; (2) an exception inside the apply, simulated by
+        // putting a FieldInfo of another type where the scale field is, then dirtying the bar so a rewrite runs.
+        // Failure mode: the seam keeps touching the bar after its prerequisite is gone, logs an error every frame, leaves
+        // the bar showing a half-written view, or fails silently without its one error.
+        private static void SeamFailClosed()
+        {
+            var s = new Scenario("Seam fail closed", 600000);
+            Roster r = Prelude(s, 5);
+            s.OnFinish(() =>
+            {
+                ErrorCapture.Stop();
+                BarAdapter.Resolve();   // leave the seam usable for whatever runs next
+            });
+            ViewOnSteps(s, r);
+
+            s.Do("1: the member is gone: resolving against a missing name", () =>
+                {
+                    ErrorCapture.Start();
+                    typeof(BarAdapter).GetMethod("Resolve", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+                        null, new[] { typeof(string) }, null).Invoke(null, new object[] { "noSuchMember" });
+                })
+                .ExpectWithin("1: the bar was handed back to vanilla", 20, () => VanillaBack(r), () => r.Last)
+                .Do("1: switched off, one report logged", () => AssertDisabledQuietly("noSuchMember"))
+                .Do("1: switching the view on again changes nothing", () =>
+                {
+                    BarProbe.Start();
+                    BarAdapter.ProbeView = true;
+                })
+                .WaitFrames(40)
+                .Do("1: still vanilla, still one report", () =>
+                {
+                    AssertDraws("seam off after a missing member", r.VanillaText, 20, ignoreDirty: true);
+                    AssertDisabledQuietly("noSuchMember");
+                })
+                .Do("2: the member is back", () =>
+                {
+                    ErrorCapture.Stop();
+                    BarAdapter.Resolve();
+                    if (!BarAdapter.Enabled)
+                        throw new InvalidOperationException("Resolve() did not re-enable the seam");
+                })
+                .ExpectWithin("2: the view is back in place", 20, () => ViewInPlace(r), () => r.Last)
+                .Do("2: the apply fails inside (the scale setter throws), the bar is dirtied", () =>
+                {
+                    ErrorCapture.Start();
+                    typeof(BarAdapter).GetField("scaleField", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                        .SetValue(null, typeof(DrawRecord).GetField(nameof(DrawRecord.frame)));
+                    Bar.MarkColonistsDirty();
+                })
+                .ExpectWithin("2: the seam switched itself off and the bar is vanilla", 20,
+                    () => !BarAdapter.Enabled && VanillaBack(r), () => $"enabled={BarAdapter.Enabled}; {r.Last}")
+                .Do("2: one report, naming the failure type", () =>
+                {
+                    AssertDisabledQuietly("ArgumentException");
+                    BarProbe.Start();
+                })
+                .WaitFrames(40)
+                .Do("2: still vanilla, still one report", () =>
+                {
+                    AssertDraws("seam off after an exception", r.VanillaText, 20, ignoreDirty: true);
+                    AssertDisabledQuietly("ArgumentException");
+                })
+                .Start();
+        }
+
+        private static void AssertDisabledQuietly(string mustMention)
+        {
+            if (BarAdapter.Enabled)
+                throw new InvalidOperationException("the seam is still enabled");
+            if (BarAdapter.Applied)
+                throw new InvalidOperationException("the seam is switched off but still reports a written view");
+            if (ErrorCapture.Captured.Count != 1)
+                throw new InvalidOperationException($"{ErrorCapture.Captured.Count} errors logged, expected exactly 1: {string.Join(" | ", ErrorCapture.Captured)}");
+            if (!ErrorCapture.Captured[0].Contains(mustMention))
+                throw new InvalidOperationException($"the error does not mention '{mustMention}': {ErrorCapture.Captured[0]}");
+        }
+
         // Precondition: view in place. Trigger: switch to the world view and back; then a caravan of two colonists (a second
         // bar group whose entries have no map), in the map and in the world view.
         // Failure mode: an exception or a wrong draw in the world view, group renumbering or group frames broken by a

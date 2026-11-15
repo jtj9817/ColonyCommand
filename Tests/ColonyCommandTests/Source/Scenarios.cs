@@ -22,6 +22,7 @@ namespace ColonyCommandTests
             ("Seam topology", SeamTopology),
             ("Seam map switch", SeamMapSwitch),
             ("Seam no save data", SeamNoSaveData),
+            ("Seam fail closed", SeamFailClosed),
         };
 
         /// <summary>

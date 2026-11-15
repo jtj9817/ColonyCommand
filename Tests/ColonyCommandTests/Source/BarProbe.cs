@@ -124,6 +124,36 @@ namespace ColonyCommandTests
             Draws.Where(d => d.dirty || d.entries != expected || d.entryCount != d.locCount).ToList();
     }
 
+    /// <summary>
+    /// Catches the mod's own deliberate errors in a scenario that provokes them (the harness counts every
+    /// "[ColonyCommand] ERROR" line as a failure). Only errors carrying the mod's tag are held back, and only while active.
+    /// </summary>
+    public static class ErrorCapture
+    {
+        public static bool Active;
+        public static readonly List<string> Captured = new List<string>();
+
+        public static void Start()
+        {
+            Captured.Clear();
+            Active = true;
+        }
+
+        public static void Stop() => Active = false;
+    }
+
+    [HarmonyPatch(typeof(Log), nameof(Log.Error), new[] { typeof(string) })]
+    public static class Patch_Log_Error
+    {
+        public static bool Prefix(string text)
+        {
+            if (!ErrorCapture.Active || text == null || !text.StartsWith($"{CC.Tag} ERROR"))
+                return true;
+            ErrorCapture.Captured.Add(text);
+            return false;
+        }
+    }
+
     [HarmonyPatch(typeof(ColonistBar), nameof(ColonistBar.ColonistBarOnGUI))]
     public static class Patch_ColonistBar_OnGUI
     {

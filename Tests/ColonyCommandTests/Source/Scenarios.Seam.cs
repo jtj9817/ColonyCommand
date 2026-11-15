@@ -101,6 +101,7 @@ namespace ColonyCommandTests
             r.VanillaText = BarProbe.Describe(r.Vanilla);
             r.Expected = ExpectedView(r.Vanilla);
             r.VanillaScale = BarProbe.CachedScale(Bar);
+            r.Last = "";
             return true;
         }
 
@@ -123,6 +124,7 @@ namespace ColonyCommandTests
             string problem = LayoutProblem(bar, cached.Count);
             if (problem != null)
                 throw new InvalidOperationException(problem);
+            r.Last = "";
             return true;
         }
 
@@ -150,6 +152,7 @@ namespace ColonyCommandTests
                 r.Last = $"scale {scale}, vanilla {r.VanillaScale}";
                 return false;
             }
+            r.Last = "";
             return true;
         }
 

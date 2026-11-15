@@ -293,6 +293,11 @@ evidence. Verify anything load-bearing against the decompiled source (`tools/van
 - On root-owned mounts run git as `git -c safe.directory="$PWD"`; prefer the edit tool over `sed -i`. (QB/QR)
 - A dirty tree restamps the DLL every build ⇒ an unnecessary in-game restart every run; commit before
   measuring. A bare `dotnet build` is the safe compile check *during* a run. (QR)
+- The harness classifies Player.log lines by words (`error`, `Exception`, `Failed`, `Missing`, `not found`...), so a
+  scenario's own progress line ("step ok: switched off with exactly one error") counts as a new error and fails the run
+  although every verdict is PASS. Keep step labels free of those words (found in Colony Command's `Seam fail closed`).
+  A scenario that provokes the mod's own error must also swallow it (Harmony prefix on `Log.Error`, test mod only), since
+  every `[Tag] ERROR` line counts. (CC)
 - Distinguish the test instance from the user's game by command line (`-savedatafolder=`), never by window
   title. Xvfb hygiene: high display numbers, record the pid, verify the process name before killing. An idle
   test instance still renders ~370% CPU — cap its frame rate or stop it. (QR)
