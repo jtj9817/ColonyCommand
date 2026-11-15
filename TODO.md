@@ -62,6 +62,8 @@ All proofs: `docs/test-runs.md` rows 2026-11-15 01:08–01:15; evidence and numb
 
 **Next:** Phase 2 (`ViewState`, `Predicates`, `RosterView`; the probe view in `BarAdapter` is replaced by the real one,
 and the `Seam *` scenarios stay as the seam's regression set).
+Hand-off for Phases 2–4 (verified engine facts, spec map, plan of attack, open points):
+[`docs/handoff/20261115-0124-phases-2-to-4.md`](docs/handoff/20261115-0124-phases-2-to-4.md).
 
 ## Phase 2 — Roster snapshot and predicates (spec §3, §4)
 
