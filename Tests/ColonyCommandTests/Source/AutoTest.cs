@@ -62,8 +62,29 @@ namespace ColonyCommandTests
             Event("launched", ("build", CC.BuildId));
         }
 
+        /// <summary>Frames in which the driver did not step a scenario because no map was ready (a long event, a load), with the reason of the last one.</summary>
+        public static int NotReadyFrames;
+        public static string NotReadyWhy = "";
+
+        /// <summary>Real time spent without a ready map so far (a long event or a load): the game, and the mod with it, is not looking at the bar then.</summary>
+        public static float NotReadySeconds;
+        private static float notReadyFrom = -1f;
+
         private void Update()
         {
+            float clock = Time.realtimeSinceStartup;
+            if (!MapReady)
+            {
+                NotReadyFrames++;
+                NotReadyWhy = $"state {Current.ProgramState}, map {(Find.CurrentMap != null)}, waiting for event {LongEventHandler.ShouldWaitForEvent}";
+                if (notReadyFrom < 0f)
+                    notReadyFrom = clock;
+            }
+            else if (notReadyFrom >= 0f)
+            {
+                NotReadySeconds += clock - notReadyFrom;
+                notReadyFrom = -1f;
+            }
             Scenario.Update();
             MenuProbe.Update();
             if (dir == null)

@@ -38,6 +38,8 @@ namespace ColonyCommandTests
             ("Skill filter", SkillFilter),
             ("Sort controls", SortControls),
             ("Reset control", ResetControl),
+            ("Live refresh", LiveRefresh),
+            ("Live refresh across views", LiveRefreshAcrossViews),
         };
 
         /// <summary>

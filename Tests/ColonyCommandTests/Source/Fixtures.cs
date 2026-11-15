@@ -52,7 +52,16 @@ namespace ColonyCommandTests
             }
         }
 
+        /// <summary>Removes every injury (a <see cref="Hediff_Injury"/>, scars included), so the pawn is no longer "injured".</summary>
+        public static void Heal(Pawn pawn)
+        {
+            foreach (Hediff injury in pawn.health.hediffSet.hediffs.Where(h => h is Hediff_Injury).ToList())
+                pawn.health.RemoveHediff(injury);
+        }
+
         public static void Draft(Pawn pawn) => pawn.drafter.Drafted = true;
+
+        public static void Undraft(Pawn pawn) => pawn.drafter.Drafted = false;
 
         public static void SetSkill(Pawn pawn, SkillDef skill, int level) => pawn.skills.GetSkill(skill).Level = level;
 

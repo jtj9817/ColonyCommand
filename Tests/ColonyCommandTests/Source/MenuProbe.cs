@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using ColonyCommand;
 using RimWorld;
@@ -19,6 +20,12 @@ namespace ColonyCommandTests
         public static int Frames { get; private set; }
         public static int WindowsSeen { get; private set; }
 
+        /// <summary>
+        /// What the mod's statics held on the main menu (<see cref="StaleReferences.Scan"/>, taken at the first menu frame the
+        /// scan runs on), or null while no scan has run. On the menu there is no game, so any held game or pawn is stale.
+        /// </summary>
+        public static List<string> HeldOnMenu { get; private set; }
+
         private static bool loading;
         private static string save;
 
@@ -28,6 +35,7 @@ namespace ColonyCommandTests
             Finished = false;
             Frames = 0;
             WindowsSeen = 0;
+            HeldOnMenu = null;
             loading = false;
             save = saveName;
         }
@@ -43,6 +51,8 @@ namespace ColonyCommandTests
                     return;
                 Frames++;
                 WindowsSeen += Find.WindowStack?.Windows.Count(w => w is ColonyCommandWindow) ?? 0;
+                if (Frames == MenuFrames / 2)
+                    HeldOnMenu = StaleReferences.Scan();   // after the bootstrap's LateUpdate has seen the menu for a while
                 if (Frames >= MenuFrames)
                 {
                     loading = true;
