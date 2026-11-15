@@ -41,13 +41,17 @@ namespace ColonyCommand
         /// <summary>The probe's rule: keep the colonists at even positions of their group (vanilla order), hide the rest.</summary>
         public static bool ProbeKeeps(int indexInGroup) => indexInGroup % 2 == 0;
 
+        private const string ScaleFieldName = "cachedScale";
+
         /// <summary>Resolves the private field once. Fails closed: feature off and one error, never a per-frame exception.</summary>
-        public static void Resolve()
+        public static void Resolve() => Resolve(ScaleFieldName);
+
+        private static void Resolve(string fieldName)
         {
-            scaleField = typeof(ColonistBar).GetField("cachedScale", BindingFlags.Instance | BindingFlags.NonPublic);
+            scaleField = typeof(ColonistBar).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             if (scaleField == null || scaleField.FieldType != typeof(float))
             {
-                CC.Error("ColonistBar.cachedScale was not found (changed by a game update?): the colonist bar view stays off");
+                Disable($"ColonistBar.{fieldName} was not found (changed by a game update?): the colonist bar view stays off");
                 return;
             }
             Enabled = true;
@@ -68,7 +72,7 @@ namespace ColonyCommand
             }
             catch (Exception e)
             {
-                Fail(e);
+                Disable($"the colonist bar view is switched off after an exception: {e}");
             }
         }
 
@@ -143,19 +147,20 @@ namespace ColonyCommand
             return group + 1;
         }
 
-        private static void Fail(Exception e)
+        /// <summary>Fails closed: logs once, stops touching the bar for good, and hands it back to vanilla.</summary>
+        private static void Disable(string error)
         {
             Enabled = false;
             applied = false;
             view.Clear();
-            CC.Error($"the colonist bar view is switched off after an exception: {e}");
+            CC.Error(error);
             try
             {
-                Find.ColonistBar.MarkColonistsDirty();   // hand the bar back to vanilla
+                Find.ColonistBar.MarkColonistsDirty();   // vanilla rebuilds its own roster and layout on the next read
             }
             catch (Exception)
             {
-                // no play UI to restore
+                // no play UI yet (startup), nothing to restore
             }
         }
     }
