@@ -35,6 +35,9 @@ namespace ColonyCommandTests
             ("Empty state", EmptyState),
             ("Enter across maps", EnterAcrossMaps),
             ("Controls placement", ControlsPlacement),
+            ("Skill filter", SkillFilter),
+            ("Sort controls", SortControls),
+            ("Reset control", ResetControl),
         };
 
         /// <summary>

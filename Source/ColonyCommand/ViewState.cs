@@ -108,8 +108,12 @@ namespace ColonyCommand
                 if (value == skill)
                     return;
                 skill = value;
-                if (skill == null && sort == SortKey.Skill)
-                    sort = SortKey.Vanilla;   // the skill sort is only available while a skill is chosen
+                if (skill == null)
+                {
+                    minLevel = AnyLevel;   // a level means nothing without a skill
+                    if (sort == SortKey.Skill)
+                        sort = SortKey.Vanilla;   // the skill sort is only available while a skill is chosen
+                }
                 Version++;
             }
         }

@@ -20,7 +20,34 @@
   <ColonyCommand_Reset>Reset</ColonyCommand_Reset>
   <ColonyCommand_ResetTip>Clear the search, filters and sorting and show the colonist bar as the game has it.</ColonyCommand_ResetTip>
 
+  <!-- Skill filter (spec section 4.1): one skill and a minimum level; "any" switches the criterion off -->
+  <ColonyCommand_SkillButton>Skill</ColonyCommand_SkillButton>
+  <ColonyCommand_SkillAny>any</ColonyCommand_SkillAny>
+  <ColonyCommand_SkillNone>No skill</ColonyCommand_SkillNone>
+  <ColonyCommand_SkillTip>Choose a skill to filter and sort by. Then choose the minimum level.</ColonyCommand_SkillTip>
+  <ColonyCommand_LevelButton>Level: any</ColonyCommand_LevelButton>
+  <ColonyCommand_LevelAny>any</ColonyCommand_LevelAny>
+  <ColonyCommand_LevelValue>{0}+</ColonyCommand_LevelValue>
+  <ColonyCommand_LevelMenuAny>Any level (no filter)</ColonyCommand_LevelMenuAny>
+  <ColonyCommand_LevelTip>Only colonists with at least this level in the chosen skill. A colonist who cannot do that skill never matches.</ColonyCommand_LevelTip>
+
+  <!-- Sort (spec section 4.2) -->
+  <ColonyCommand_SortButton>Sort: {0}</ColonyCommand_SortButton>
+  <ColonyCommand_SortVanilla>vanilla</ColonyCommand_SortVanilla>
+  <ColonyCommand_SortName>name</ColonyCommand_SortName>
+  <ColonyCommand_SortMood>mood</ColonyCommand_SortMood>
+  <ColonyCommand_SortMenuVanilla>Vanilla order</ColonyCommand_SortMenuVanilla>
+  <ColonyCommand_SortMenuName>Name</ColonyCommand_SortMenuName>
+  <ColonyCommand_SortMenuMood>Mood</ColonyCommand_SortMenuMood>
+  <ColonyCommand_SortMenuSkill>Selected skill ({0})</ColonyCommand_SortMenuSkill>
+  <ColonyCommand_SortTip>How the colonists are ordered. The game's own order is never changed; Vanilla order brings it back.</ColonyCommand_SortTip>
+  <ColonyCommand_DirNameAsc>A-Z</ColonyCommand_DirNameAsc>
+  <ColonyCommand_DirNameDesc>Z-A</ColonyCommand_DirNameDesc>
+  <ColonyCommand_DirHigh>High-low</ColonyCommand_DirHigh>
+  <ColonyCommand_DirLow>Low-high</ColonyCommand_DirLow>
+  <ColonyCommand_DirTip>Reverse the sort direction. Colonists without a value (no mood, no usable skill) are always last.</ColonyCommand_DirTip>
+
   <!-- Compact layout: the chips fold into one menu when there is no room for them -->
-  <ColonyCommand_Filters>Filters</ColonyCommand_Filters>
+  <ColonyCommand_Filters>Filters...</ColonyCommand_Filters>
 
 </LanguageData>

@@ -65,12 +65,18 @@ namespace ColonyCommandTests
         /// </summary>
         public static void SetJobTag(Pawn pawn, JobTag tag) => pawn.mindState.lastJobTag = tag;
 
-        /// <summary>A skill every one of these pawns can use (not totally disabled), or null when there is none.</summary>
+        /// <summary>
+        /// A skill every one of these pawns can use (not totally disabled), or null when there is none. The one with the shortest
+        /// label: the strip's buttons carry it, and a long name would fold the row at the 800 px minimum for a reason that has
+        /// nothing to do with what a scenario tests.
+        /// </summary>
         public static SkillDef CommonSkill(IEnumerable<Pawn> pawns)
         {
             List<Pawn> list = pawns.ToList();
-            return DefDatabase<SkillDef>.AllDefsListForReading.FirstOrDefault(def =>
-                list.All(p => p.skills != null && !p.skills.GetSkill(def).TotallyDisabled));
+            return DefDatabase<SkillDef>.AllDefsListForReading
+                .Where(def => list.All(p => p.skills != null && !p.skills.GetSkill(def).TotallyDisabled))
+                .OrderBy(def => def.skillLabel.Length).ThenBy(def => def.defName)
+                .FirstOrDefault();
         }
     }
 }

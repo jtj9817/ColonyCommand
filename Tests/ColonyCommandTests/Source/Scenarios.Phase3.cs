@@ -679,5 +679,303 @@ namespace ColonyCommandTests
             if (stripWidth > w - ControlsLayout.AlertsWidth - 16f && !p.StripCompact)
                 throw new InvalidOperationException($"{stripWidth} px of chips were not folded into the Filters button at {at}");
         }
+
+        // ------------------------------------------------------------------------------------------ Phase 4 helpers
+
+        private static FloatMenu OpenMenu() => Find.WindowStack.WindowOfType<FloatMenu>();
+
+        /// <summary>The options of the FloatMenu that is open now (protected in vanilla: read through reflection).</summary>
+        private static List<FloatMenuOption> OpenMenuOptions()
+        {
+            FloatMenu menu = OpenMenu();
+            if (menu == null)
+                throw new InvalidOperationException("no dropdown is open");
+            return (List<FloatMenuOption>)HarmonyLib.AccessTools.Field(typeof(FloatMenu), "options").GetValue(menu);
+        }
+
+        private static string MenuLabels() => string.Join(" | ", OpenMenuOptions().Select(o => o.Label));
+
+        /// <summary>Chooses the option the way a click does: its action runs, then the menu closes.</summary>
+        private static void ChooseOption(string label)
+        {
+            FloatMenu menu = OpenMenu();
+            FloatMenuOption option = OpenMenuOptions().FirstOrDefault(o => o.Label == label);
+            if (option == null)
+                throw new InvalidOperationException($"no option '{label}' in the dropdown [{MenuLabels()}]");
+            option.action();
+            Find.WindowStack.TryRemove(menu, doCloseSound: false);
+        }
+
+        private static void CloseAnyMenu()
+        {
+            FloatMenu menu;
+            while ((menu = OpenMenu()) != null)
+                Find.WindowStack.TryRemove(menu, doCloseSound: false);
+        }
+
+        /// <summary>The unfolded strip is what these scenarios click: at 800 px it has to fit with everything set (the folded menu has its own checks).</summary>
+        private static void AssertStripUnfolded(string state)
+        {
+            Placement p = TheWindow().CurrentPlacement;
+            if (p.StripCompact)
+                throw new InvalidOperationException($"the strip is folded into the Filters button with {state}: the buttons these steps click do not exist (strip {p.Strip}, skill {TheWindow().SkillLabel}, sort {TheWindow().SortLabel})");
+        }
+
+        private static string LevelOption(int level) => (string)"ColonyCommand_LevelValue".Translate(level);
+
+        // ----------------------------------------------------------------------------------------- Skill filter
+
+        // Precondition: the cast staged and paused; the name token isolates it. Trigger: a real click on the Skill button, then
+        // the dropdown's own options, Escape, and the level presets 0/5/10/15/Any.
+        // Failure modes: a wrong dropdown (a skill missing, no way back to "No skill"), the level boundary off by one (>= vs >),
+        // 0 treated as Any or as "available", a colonist who cannot do the skill (the corpse) passing, a skill alone hiding
+        // people, a dropdown that keeps the search field focused, leaves the bar dirty, or does not close on Escape (FR-05)
+        // — or whose Escape reaches the main menu.
+        private static void SkillFilter()
+        {
+            var s = new Scenario("Skill filter", 4000000);
+            var r = new Roster();
+            Cast c = Stage(s, r);
+            ViewStep(s, r, c, "the name token isolates the cast", () => ViewState.Query = Token, Letters(c, "ABCDEF"));
+            s.WaitFrames(8);
+
+            // The field holds the focus first: opening a dropdown must take it away (a click elsewhere), and leave the bar alone.
+            FocusSearch(s, r);
+            ClickStepAt(s, "click the Skill button", () => Center(TheWindow().SkillRect));
+            s.ExpectWithin("a dropdown opened: 'No skill' and every skill of the game", 10, () => OpenMenu() != null, () => $"windows [{string.Join(", ", Find.WindowStack.Windows.Select(w => w.GetType().Name))}]")
+                .Do("its options are right and the field lost the focus", () =>
+                {
+                    List<string> want = new[] { (string)"ColonyCommand_SkillNone".Translate() }
+                        .Concat(DefDatabase<SkillDef>.AllDefsListForReading.Select(d => d.skillLabel.CapitalizeFirst())).ToList();
+                    List<string> got = OpenMenuOptions().Select(o => o.Label).ToList();
+                    if (!want.SequenceEqual(got))
+                        throw new InvalidOperationException($"the dropdown holds [{string.Join(" | ", got)}], expected [{string.Join(" | ", want)}]");
+                    if (TheWindow().SearchFocused)
+                        throw new InvalidOperationException("the search field kept the focus while the dropdown opened");
+                    if (BarProbe.IsDirty(Bar))
+                        throw new InvalidOperationException("opening the dropdown left the bar dirty");
+                });
+            s.Do("count main menu requests from here", () => MenuRequests.Count = 0);
+            InputStep(s, "press Escape with the dropdown open", "key Escape");
+            s.ExpectWithin("Escape closed the dropdown and nothing else: no skill chosen, the bar is as it was, no main menu", 10, () => OpenMenu() == null,
+                    () => $"still open: [{MenuLabels()}]")
+                .Do("nothing changed", () =>
+                {
+                    if (ViewState.Skill != null)
+                        throw new InvalidOperationException("Escape chose a skill");
+                    if (MenuRequests.Count != 0)
+                        throw new InvalidOperationException("the Escape that closed the dropdown also asked for the main menu");
+                })
+                .ExpectWithin("still the whole cast", 10, () => Shows(r, c, Letters(c, "ABCDEF")), () => r.Last);
+
+            // Choosing a skill hands over to the level dropdown (a skill alone filters nobody).
+            ClickStepAt(s, "click the Skill button again", () => Center(TheWindow().SkillRect));
+            s.ExpectWithin("the dropdown is open", 10, () => OpenMenu() != null)
+                .Do("choose the skill", () => ChooseOption(c.Skill.skillLabel.CapitalizeFirst()))
+                .ExpectWithin("the level dropdown opened by itself: Any, 0+, 5+, 10+, 15+; the skill alone hides nobody", 10,
+                    () => OpenMenu() != null && ViewState.Skill == c.Skill && Shows(r, c, Letters(c, "ABCDEF")), () => $"skill {ViewState.Skill?.defName}; {r.Last}")
+                .Do("its presets are the spec's", () =>
+                {
+                    string want = string.Join(" | ", new[] { (string)"ColonyCommand_LevelMenuAny".Translate() }.Concat(new[] { 0, 5, 10, 15 }.Select(LevelOption)));
+                    if (MenuLabels() != want)
+                        throw new InvalidOperationException($"the level dropdown holds [{MenuLabels()}], expected [{want}]");
+                });
+            var levels = new (int level, string expect)[] { (0, "ABCDE"), (5, "ACD"), (10, "ACD"), (15, "D") };
+            // 0+ keeps everybody who can do the skill (E is at level 0, the corpse is unavailable); 5+ drops B (4) and E; 10+ keeps
+            // A and C (12) and D (18); 15+ only D.
+            ChooseStep(s, "choose 0+", () => ChooseOption(LevelOption(0)));
+            s.ExpectWithin("0+: everybody who can do the skill", 20, () => ViewState.MinLevel == 0 && Shows(r, c, Letters(c, "ABCDE")), () => $"min {ViewState.MinLevel}; {r.Last}");
+            foreach ((int level, string expect) in levels.Skip(1))
+            {
+                int lv = level;
+                string want = expect;
+                s.Do($"the strip is unfolded with a skill and a level set", () => AssertStripUnfolded($"{c.Skill.defName} and a level"));
+                ClickStepAt(s, $"click the Level button for {lv}+", () => Center(TheWindow().LevelRect));
+                s.ExpectWithin("the level dropdown is open", 10, () => OpenMenu() != null)
+                    .Do($"choose {lv}+", () => ChooseOption(LevelOption(lv)))
+                    .ExpectWithin($"{lv}+: [{want}]", 20, () => ViewState.MinLevel == lv && Shows(r, c, Letters(c, want)), () => $"min {ViewState.MinLevel}; {r.Last}");
+            }
+            ClickStepAt(s, "click the Level button for Any", () => Center(TheWindow().LevelRect));
+            s.ExpectWithin("the level dropdown is open", 10, () => OpenMenu() != null)
+                .Do("choose Any level", () => ChooseOption((string)"ColonyCommand_LevelMenuAny".Translate()))
+                .ExpectWithin("Any: the criterion is off again, the skill stays chosen, everybody shows", 20,
+                    () => ViewState.MinLevel == ViewState.AnyLevel && ViewState.Skill == c.Skill && Shows(r, c, Letters(c, "ABCDEF")), () => $"min {ViewState.MinLevel}; {r.Last}");
+            ClickStepAt(s, "click the Skill button, choose 'No skill'", () => Center(TheWindow().SkillRect));
+            s.ExpectWithin("the dropdown is open", 10, () => OpenMenu() != null)
+                .Do("choose 'No skill'", () => ChooseOption((string)"ColonyCommand_SkillNone".Translate()))
+                .Do("the skill and its level are gone, and so is the Level button", () =>
+                {
+                    if (ViewState.Skill != null || ViewState.MinLevel != ViewState.AnyLevel)
+                        throw new InvalidOperationException($"skill {ViewState.Skill?.defName}, level {ViewState.MinLevel}");
+                })
+                .WaitFrames(6)
+                .Do("no Level button without a skill", () =>
+                {
+                    if (TheWindow().LevelRect.width > 0f)
+                        throw new InvalidOperationException("the Level button shows although no skill is chosen");
+                })
+                .OnFinish(CloseAnyMenu);
+            s.Start();
+        }
+
+        private static void ChooseStep(Scenario s, string label, Action choose) => s.Do(label, choose);
+
+        // ----------------------------------------------------------------------------------------- Sort controls
+
+        // Precondition: the cast staged and paused (no query: the map's own colonists interleave). Trigger: a real click on the
+        // Sort button, its options, the direction button, the skill sort once a skill is chosen.
+        // Failure modes: the skill sort offered with no skill chosen; a key that starts in the wrong direction; the direction
+        // button not reversing (or shown while the order is vanilla); the order not matching the spec (Phase 2 oracle); Vanilla
+        // not bringing the game's own bar back.
+        private static void SortControls()
+        {
+            var s = new Scenario("Sort controls", 4000000);
+            var r = new Roster();
+            Cast c = Stage(s, r);
+            s.WaitFrames(8);
+            ClickStepAt(s, "click the Sort button", () => Center(TheWindow().SortRect));
+            s.ExpectWithin("the sort dropdown is open", 10, () => OpenMenu() != null)
+                .Do("Vanilla order, Name, Mood; no skill sort without a skill", () =>
+                {
+                    string want = string.Join(" | ", new[] { "ColonyCommand_SortMenuVanilla", "ColonyCommand_SortMenuName", "ColonyCommand_SortMenuMood" }.Select(k => (string)k.Translate()));
+                    if (MenuLabels() != want)
+                        throw new InvalidOperationException($"the sort dropdown holds [{MenuLabels()}], expected [{want}]");
+                    if (TheWindow().DirectionRect.width > 0f)
+                        throw new InvalidOperationException("the direction button shows while the order is the game's");
+                })
+                .Do("choose Name", () => ChooseOption((string)"ColonyCommand_SortMenuName".Translate()))
+                .ExpectWithin("A-Z (case-insensitive)", 20, () => ViewState.Sort == SortKey.Name && !ViewState.Descending && Shows(r, c, () => c.Ordered("C", "E", "F", "D", "A", "B")),
+                    () => $"sort {ViewState.Sort}, descending {ViewState.Descending}; {r.Last}")
+                .WaitFrames(6)
+                .Do("the direction button reads A-Z", () =>
+                {
+                    if (TheWindow().DirectionRect.width <= 0f || TheWindow().DirectionLabel != (string)"ColonyCommand_DirNameAsc".Translate())
+                        throw new InvalidOperationException($"direction button '{TheWindow().DirectionLabel}' at {TheWindow().DirectionRect}");
+                });
+            ClickStepAt(s, "click the direction button", () => Center(TheWindow().DirectionRect));
+            s.ExpectWithin("Z-A", 20, () => ViewState.Descending && Shows(r, c, () => c.Ordered("B", "A", "D", "F", "E", "C")), () => $"descending {ViewState.Descending}; {r.Last}");
+
+            ClickStepAt(s, "click the Sort button", () => Center(TheWindow().SortRect));
+            s.ExpectWithin("the sort dropdown is open", 10, () => OpenMenu() != null)
+                .Do("choose Mood", () => ChooseOption((string)"ColonyCommand_SortMenuMood".Translate()))
+                .ExpectWithin("a new key starts high to low (ties in vanilla order, the corpse last)", 20,
+                    () => ViewState.Sort == SortKey.Mood && ViewState.Descending && Shows(r, c, () => c.Ordered("A", "CD", "B", "E", "F")),
+                    () => $"sort {ViewState.Sort}, descending {ViewState.Descending}; {r.Last}");
+            ClickStepAt(s, "click the direction button", () => Center(TheWindow().DirectionRect));
+            s.ExpectWithin("low to high", 20, () => !ViewState.Descending && Shows(r, c, () => c.Ordered("E", "B", "CD", "A", "F")), () => $"descending {ViewState.Descending}; {r.Last}");
+
+            s.Do("choose a skill (through the state: the Skill dropdown is proven by Skill filter)", () => ViewState.Skill = c.Skill)
+                .WaitFrames(6)
+                .Do("the strip is unfolded with a skill, a sort and its direction", () => AssertStripUnfolded("a skill and a sort"));
+            ClickStepAt(s, "click the Sort button", () => Center(TheWindow().SortRect));
+            s.ExpectWithin("the sort dropdown is open", 10, () => OpenMenu() != null)
+                .Do("now there is a skill sort too", () =>
+                {
+                    string skillOption = (string)"ColonyCommand_SortMenuSkill".Translate(c.Skill.skillLabel);
+                    if (!OpenMenuOptions().Any(o => o.Label == skillOption))
+                        throw new InvalidOperationException($"no '{skillOption}' in [{MenuLabels()}]");
+                    ChooseOption(skillOption);
+                })
+                .ExpectWithin("high to low in the chosen skill", 20,
+                    () => ViewState.Sort == SortKey.Skill && ViewState.Descending && Shows(r, c, () => c.Ordered("D", "AC", "B", "E", "F")),
+                    () => $"sort {ViewState.Sort}, descending {ViewState.Descending}; {r.Last}");
+
+            ClickStepAt(s, "click the Sort button", () => Center(TheWindow().SortRect));
+            s.ExpectWithin("the sort dropdown is open", 10, () => OpenMenu() != null)
+                .Do("choose Vanilla order", () => ChooseOption((string)"ColonyCommand_SortMenuVanilla".Translate()))
+                .ExpectWithin("the game's own bar is back, with nothing else set", 20, () => ViewState.Sort == SortKey.Vanilla && VanillaBack(r), () => $"sort {ViewState.Sort}; {r.Last}")
+                .WaitFrames(6)
+                .Do("and the direction button is gone", () =>
+                {
+                    if (TheWindow().DirectionRect.width > 0f)
+                        throw new InvalidOperationException("the direction button still shows");
+                })
+                .OnFinish(CloseAnyMenu);
+            s.Start();
+        }
+
+        // ---------------------------------------------------------------------------------------- Reset control
+
+        // Precondition: the cast staged and paused; a query, a status, a skill with a level, a sort and a direction are set.
+        // Trigger: a real click on the Reset button.
+        // Failure modes: Reset shown when nothing is set, or missing when something is; Reset leaving any one of the six
+        // pieces of state (or the search field's text) behind; the bar not exactly vanilla afterwards — checked the hard way:
+        // a real drag on the bar must reorder again (it is a no-op while a view is active), with a control that it does not.
+        // The compact Filters menu carries the same Reset.
+        private static void ResetControl()
+        {
+            var s = new Scenario("Reset control", 4000000);
+            var r = new Roster();
+            Cast c = Stage(s, r);
+            Dictionary<Pawn, int> orders = null;
+            s.Do("remember every display order", () => orders = r.Vanilla.Where(e => e.pawn != null).ToDictionary(e => e.pawn, e => e.pawn.playerSettings.displayOrder))
+                .OnFinish(() => RestoreOrders(orders));
+            s.WaitFrames(8)
+                .Do("nothing is set: no Reset button, and no Reset in the folded menu", () =>
+                {
+                    if (TheWindow().StripResetRect.width > 0f)
+                        throw new InvalidOperationException("the Reset button shows although nothing is set");
+                    if (TheWindow().FoldedMenuOptions().Any(o => o.Label == (string)"ColonyCommand_Reset".Translate()))
+                        throw new InvalidOperationException("the folded menu offers Reset although nothing is set");
+                })
+                .Do("set a query, a status, a skill, a level, a sort and a direction", () =>
+                {
+                    ViewState.Query = "fx";
+                    ViewState.Status = StatusFilter.Injured;
+                    ViewState.Skill = c.Skill;
+                    ViewState.MinLevel = 5;
+                    ViewState.Sort = SortKey.Mood;
+                    ViewState.Descending = true;
+                })
+                .ExpectWithin("the view holds: injured, skill >= 5 (A, D), by mood high to low", 20, () => Shows(r, c, () => c.Ordered("A", "D")), () => r.Last)
+                .WaitFrames(8);
+            DragStep(s, "control: a drag while the view is active", 0, 1);
+            s.Do("it reordered nothing: the view's drag is a no-op", () =>
+            {
+                if (BarProbe.ReorderCalls != 0)
+                    throw new InvalidOperationException($"{BarProbe.ReorderCalls} Reorder call(s) reached the vanilla writer from the view");
+            });
+            s.Do("the strip is unfolded with everything set", () => AssertStripUnfolded("a query, a status, a skill, a level, a sort and a direction"));
+            ClickStepAt(s, "click the Reset button", () => Center(TheWindow().StripResetRect));
+            s.ExpectWithin("Reset: all six pieces of state at their defaults, the field empty, the vanilla bar exactly back", 20, () =>
+                    !ViewState.AnythingSet && ViewState.Query == "" && ViewState.Status == StatusFilter.None && ViewState.Skill == null
+                    && ViewState.MinLevel == ViewState.AnyLevel && ViewState.Sort == SortKey.Vanilla && !ViewState.Descending
+                    && TheWindow().Search.filter.Text == "" && VanillaBack(r),
+                    () => $"anything set {ViewState.AnythingSet}, query '{ViewState.Query}', {ViewState.Status}, {ViewState.Skill?.defName}, level {ViewState.MinLevel}, {ViewState.Sort}, desc {ViewState.Descending}, field '{TheWindow().Search.filter.Text}'; {r.Last}")
+                .WaitFrames(8)
+                .Do("and the Reset button is gone again", () =>
+                {
+                    if (TheWindow().StripResetRect.width > 0f)
+                        throw new InvalidOperationException("the Reset button still shows");
+                });
+            DragStep(s, "after Reset: a real drag on the bar", 0, 2);
+            s.Do("it reaches ColonistBar.Reorder again: the bar is the game's own, drag included", () =>
+                {
+                    if (BarProbe.ReorderCalls < 1)
+                        throw new InvalidOperationException("the drag after Reset did not reach ColonistBar.Reorder: the bar is not exactly vanilla (or input injection failed: the control above did not prove it)");
+                    r.Notes.Add($"drag after Reset: {BarProbe.ReorderCalls} Reorder call(s)");
+                    RestoreOrders(orders);
+                })
+                .ExpectWithin("vanilla order back after restoring the display orders", 20, () => VanillaBack(r), () => r.Last);
+
+            // The compact strip's menu does the same.
+            s.Do("set a status and a sort, then run Reset from the folded menu's options", () =>
+                {
+                    ViewState.Status = StatusFilter.Drafted;
+                    ViewState.Sort = SortKey.Name;
+                })
+                .ExpectWithin("the view holds", 20, () => Shows(r, c, () => "B"), () => r.Last)
+                .Do("the folded menu lists Reset, chooses it, and everything is cleared", () =>
+                {
+                    FloatMenuOption option = TheWindow().FoldedMenuOptions().FirstOrDefault(o => o.Label == (string)"ColonyCommand_Reset".Translate());
+                    if (option == null)
+                        throw new InvalidOperationException("the folded menu has no Reset");
+                    option.action();
+                    if (ViewState.AnythingSet)
+                        throw new InvalidOperationException("the folded menu's Reset left something set");
+                })
+                .ExpectWithin("vanilla again", 20, () => VanillaBack(r), () => r.Last)
+                .Start();
+        }
     }
 }

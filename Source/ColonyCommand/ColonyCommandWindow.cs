@@ -26,6 +26,12 @@ namespace ColonyCommand
         private readonly int[] chipLabelCounts = { -1, -1, -1, -1 };
         private string placeholder, noMatches, reset, resetTip, filters;
 
+        // Phase 4 strip items, rebuilt when the criteria change (labels) or every event (positions).
+        private int labelVersion = -1;
+        private string skillLabel, levelLabel, sortLabel, dirLabel, skillTip, levelTip, sortTip, dirTip;
+        private float skillWidth, levelWidth, sortWidth, dirWidth, resetButtonWidth;
+        private Rect skillRect, levelRect, sortRect, dirRect, stripResetRect;
+
         public ColonyCommandWindow()
         {
             layer = WindowLayer.GameUI;
@@ -55,6 +61,25 @@ namespace ColonyCommand
         /// asked during OnGUI, so tests read this copy instead.
         /// </summary>
         public bool SearchFocused { get; private set; }
+
+        /// <summary>
+        /// Where the advanced controls are as last placed: Skill, minimum Level (only with a skill chosen), Sort, its direction
+        /// (only while sorting) and Reset (only when something is set). A zero-width rect means the control is not shown.
+        /// </summary>
+        public Rect SkillRect => skillRect;
+        public Rect LevelRect => levelRect;
+        public Rect SortRect => sortRect;
+        public Rect DirectionRect => dirRect;
+        public Rect StripResetRect => stripResetRect;
+
+        /// <summary>What the strip's buttons say right now.</summary>
+        public string SkillLabel => skillLabel;
+        public string LevelLabel => levelLabel;
+        public string SortLabel => sortLabel;
+        public string DirectionLabel => dirLabel;
+
+        /// <summary>The options of the Filters menu the compact strip opens (the same actions as the buttons it stands in for).</summary>
+        public List<FloatMenuOption> FoldedMenuOptions() => FilterMenu(ViewState.Snapshot);
 
         /// <summary>The text of the chip at this index, count included.</summary>
         public string ChipLabel(int index) => chipLabels[index];
@@ -188,7 +213,7 @@ namespace ColonyCommand
             if (BarAdapter.Applied)
                 metrics = ControlsLayout.Union(metrics, BarAdapter.VanillaFootprint);   // anchored to the unfiltered bar: no jumping
             metrics = ControlsLayout.Union(metrics, ControlsLayout.Baseline(UI.screenWidth, Prefs.ShowWeaponsUnderPortraitMode != ShowWeaponsUnderPortraitMode.Never));
-            ChipWidths(out float stripWidth);
+            ChipWidths(out float chipsWidth);
             Vector2 resetSize, filtersSize, emptySize;
             using (new TextBlock(GameFont.Small))
             {
@@ -196,18 +221,46 @@ namespace ColonyCommand
                 filtersSize = Text.CalcSize(filters);
                 emptySize = Text.CalcSize(noMatches);
             }
+            EnsureAdvancedLabels(criteria);
+            float stripWidth = chipsWidth + MeasureAdvanced(criteria, resetSize.x);
             float emptyWidth = emptySize.x + ControlsLayout.Gap * 3f + resetSize.x + 24f;
             placement = ControlsLayout.Compute(UI.screenWidth, UI.screenHeight, metrics, empty, stripWidth, filtersSize.x + 24f, emptyWidth,
                 searchOpen || criteria.HasQuery);
             if (!barShown)
                 placement.Visible = false;
-            float x = placement.Strip.x;
+            float x = placement.Strip.x, y = placement.Strip.y, h = placement.Strip.height;
             for (int i = 0; i < 4; i++)
             {
-                chipRects[i] = new Rect(x, placement.Strip.y, chipWidths[i], placement.Strip.height);
+                chipRects[i] = new Rect(x, y, chipWidths[i], h);
                 x += chipWidths[i] + ControlsLayout.Gap;
             }
+            x += ControlsLayout.Gap;   // a little air between the chips and the advanced controls
+            if (placement.StripCompact)
+            {
+                // Folded into the Filters button: none of the unfolded controls exists this event.
+                for (int i = 0; i < 4; i++)
+                    chipRects[i] = new Rect(x, y, 0f, h);
+                skillRect = levelRect = sortRect = dirRect = stripResetRect = new Rect(x, y, 0f, h);
+            }
+            else
+            {
+                skillRect = Place(ref x, y, h, skillWidth);
+                levelRect = Place(ref x, y, h, levelWidth);
+                sortRect = Place(ref x, y, h, sortWidth);
+                dirRect = Place(ref x, y, h, dirWidth);
+                stripResetRect = Place(ref x, y, h, resetButtonWidth);
+            }
             resetRect = new Rect(placement.Empty.xMax - resetSize.x - 16f, placement.Empty.y, resetSize.x + 16f, placement.Empty.height);
+        }
+
+        /// <summary>The next strip item, or an empty rect when its width is zero (not shown).</summary>
+        private static Rect Place(ref float x, float y, float h, float width)
+        {
+            if (width <= 0f)
+                return new Rect(x, y, 0f, h);
+            var r = new Rect(x, y, width, h);
+            x += width + ControlsLayout.Gap;
+            return r;
         }
 
         private readonly float[] chipWidths = new float[4];
@@ -229,10 +282,55 @@ namespace ColonyCommand
                         chipLabelCounts[i] = values[i];
                         chipLabels[i] = "ColonyCommand_ChipWithCount".Translate(chipNames[i], values[i]);
                     }
-                    chipWidths[i] = Mathf.Max(48f, Text.CalcSize(chipLabels[i]).x + 16f);
+                    chipWidths[i] = Mathf.Max(44f, Text.CalcSize(chipLabels[i]).x + 12f);
                     total += chipWidths[i] + (i > 0 ? ControlsLayout.Gap : 0f);
                 }
             }
+        }
+
+        /// <summary>Labels of Skill, Level, Sort and the direction for the current criteria (translated again only when they change).</summary>
+        private void EnsureAdvancedLabels(Criteria c)
+        {
+            if (labelVersion == ViewState.Version && skillLabel != null)
+                return;
+            labelVersion = ViewState.Version;
+            // Short on purpose: at the 800 px minimum the whole row has to fit beside the alert column. The skill is named alone,
+            // the level shows as "10+"; the tooltips say what each button is.
+            skillLabel = c.Skill == null ? "ColonyCommand_SkillButton".Translate() : c.Skill.skillLabel.CapitalizeFirst();
+            levelLabel = c.MinLevel == ViewState.AnyLevel ? "ColonyCommand_LevelButton".Translate() : "ColonyCommand_LevelValue".Translate(c.MinLevel);
+            SortKey sort = c.EffectiveSort;
+            string sortName = sort == SortKey.Name ? "ColonyCommand_SortName".Translate()
+                : sort == SortKey.Mood ? "ColonyCommand_SortMood".Translate()
+                : sort == SortKey.Skill ? c.Skill.skillLabel
+                : "ColonyCommand_SortVanilla".Translate();
+            sortLabel = "ColonyCommand_SortButton".Translate(sortName);
+            dirLabel = sort == SortKey.Name ? (c.Descending ? "ColonyCommand_DirNameDesc" : "ColonyCommand_DirNameAsc").Translate()
+                : (c.Descending ? "ColonyCommand_DirHigh" : "ColonyCommand_DirLow").Translate();
+            skillTip = "ColonyCommand_SkillTip".Translate();
+            levelTip = "ColonyCommand_LevelTip".Translate();
+            sortTip = "ColonyCommand_SortTip".Translate();
+            dirTip = "ColonyCommand_DirTip".Translate();
+        }
+
+        /// <summary>Widths of the advanced controls for these criteria (0 = not shown) and the room they take in the row.</summary>
+        private float MeasureAdvanced(Criteria c, float resetTextWidth)
+        {
+            float Width(string label, float min, float max) => Mathf.Clamp(Text.CalcSize(label).x + 12f, min, max);
+            using (new TextBlock(GameFont.Small))
+            {
+                skillWidth = Width(skillLabel, 56f, 112f);
+                levelWidth = c.Skill != null ? Width(levelLabel, 48f, 88f) : 0f;
+                sortWidth = Width(sortLabel, 64f, 112f);
+                dirWidth = c.EffectiveSort != SortKey.Vanilla ? Width(dirLabel, 56f, 88f) : 0f;
+                resetButtonWidth = ViewState.AnythingSet ? resetTextWidth + 12f : 0f;
+            }
+            float total = ControlsLayout.Gap;
+            foreach (float w in new[] { skillWidth, levelWidth, sortWidth, dirWidth, resetButtonWidth })
+            {
+                if (w > 0f)
+                    total += w + ControlsLayout.Gap;
+            }
+            return total;
         }
 
         // ---------------------------------------------------------------------------------------- drawing
@@ -252,6 +350,82 @@ namespace ColonyCommand
                 if (DrawChip(chipRects[i], chipLabels[i], IsActive(i, c), chipTips[i]))
                     Click(i, c);
             }
+            if (DrawButton(skillRect, skillLabel, skillTip, c.Skill != null))
+                OpenSkillMenu();
+            if (levelRect.width > 0f && DrawButton(levelRect, levelLabel, levelTip, c.HasSkillCriterion))
+                OpenLevelMenu();
+            if (DrawButton(sortRect, sortLabel, sortTip, c.EffectiveSort != SortKey.Vanilla))
+                OpenSortMenu();
+            if (dirRect.width > 0f && DrawButton(dirRect, dirLabel, dirTip, false))
+                ViewState.Descending = !c.Descending;
+            if (stripResetRect.width > 0f && DrawButton(stripResetRect, reset, resetTip, false))
+                ResetAll();
+        }
+
+        /// <summary>A strip button in the same selectable-option look as the chips; <paramref name="active"/> marks a set criterion.</summary>
+        private static bool DrawButton(Rect rect, string label, string tip, bool active)
+        {
+            Widgets.DrawOptionBackground(rect, active);
+            using (new TextBlock(GameFont.Small, TextAnchor.MiddleCenter))
+                Widgets.Label(rect, label.Truncate(rect.width - 8f));
+            TooltipHandler.TipRegion(rect, tip);
+            return Widgets.ButtonInvisible(rect);
+        }
+
+        // ------------------------------------------------------------------------------------------- menus
+
+        /// <summary>
+        /// Vanilla FloatMenus (Escape and a click elsewhere close them, as everywhere in the game). Choosing a skill while no
+        /// level is set goes straight on to the level menu: a skill alone filters nobody.
+        /// </summary>
+        private void OpenSkillMenu()
+        {
+            var options = new List<FloatMenuOption> { new FloatMenuOption("ColonyCommand_SkillNone".Translate(), () => ViewState.Skill = null) };
+            foreach (SkillDef def in DefDatabase<SkillDef>.AllDefsListForReading)
+            {
+                SkillDef chosen = def;
+                options.Add(new FloatMenuOption(def.skillLabel.CapitalizeFirst(), () =>
+                {
+                    ViewState.Skill = chosen;
+                    if (ViewState.MinLevel == ViewState.AnyLevel)
+                        OpenLevelMenu();
+                }));
+            }
+            Find.WindowStack.Add(new FloatMenu(options));
+        }
+
+        private void OpenLevelMenu()
+        {
+            var options = new List<FloatMenuOption> { new FloatMenuOption("ColonyCommand_LevelMenuAny".Translate(), () => ViewState.MinLevel = ViewState.AnyLevel) };
+            foreach (int level in LevelPresets)
+            {
+                int chosen = level;
+                options.Add(new FloatMenuOption("ColonyCommand_LevelValue".Translate(level), () => ViewState.MinLevel = chosen));
+            }
+            Find.WindowStack.Add(new FloatMenu(options));
+        }
+
+        /// <summary>Spec section 4.1: Any (switches the criterion off), 0, 5, 10, 15.</summary>
+        public static readonly int[] LevelPresets = { 0, 5, 10, 15 };
+
+        private void OpenSortMenu()
+        {
+            var options = new List<FloatMenuOption>
+            {
+                new FloatMenuOption("ColonyCommand_SortMenuVanilla".Translate(), () => ChooseSort(SortKey.Vanilla)),
+                new FloatMenuOption("ColonyCommand_SortMenuName".Translate(), () => ChooseSort(SortKey.Name)),
+                new FloatMenuOption("ColonyCommand_SortMenuMood".Translate(), () => ChooseSort(SortKey.Mood)),
+            };
+            if (ViewState.Skill != null)   // the skill sort exists only once a skill is chosen
+                options.Add(new FloatMenuOption("ColonyCommand_SortMenuSkill".Translate(ViewState.Skill.skillLabel), () => ChooseSort(SortKey.Skill)));
+            Find.WindowStack.Add(new FloatMenu(options));
+        }
+
+        /// <summary>A new key starts in its natural direction: names A-Z, mood and skill high to low (spec section 4.2 lists High-low first).</summary>
+        private static void ChooseSort(SortKey key)
+        {
+            ViewState.Sort = key;
+            ViewState.Descending = key == SortKey.Mood || key == SortKey.Skill;
         }
 
         private static bool IsActive(int chip, Criteria c)
@@ -285,6 +459,13 @@ namespace ColonyCommand
                 int chip = i;
                 options.Add(new FloatMenuOption(chipLabels[i], () => Click(chip, ViewState.Snapshot)));
             }
+            EnsureAdvancedLabels(c);
+            options.Add(new FloatMenuOption(skillLabel + "...", OpenSkillMenu));
+            if (c.Skill != null)
+                options.Add(new FloatMenuOption(levelLabel + "...", OpenLevelMenu));
+            options.Add(new FloatMenuOption(sortLabel + "...", OpenSortMenu));
+            if (c.EffectiveSort != SortKey.Vanilla)
+                options.Add(new FloatMenuOption(dirLabel, () => ViewState.Descending = !ViewState.Descending));
             if (ViewState.AnythingSet)
                 options.Add(new FloatMenuOption(reset, ResetAll));
             return options;
