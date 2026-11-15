@@ -59,7 +59,8 @@ HARMONY_DIR = Path(os.environ.get("HARMONY_DIR", RW_DIR / "../../workshop/conten
 MAP_SIZE = os.environ.get("MOD_MAP_SIZE", "200")
 # The instance renders in software (llvmpipe): window size, and llvmpipe's thread count (LP_NUM_THREADS; empty: one
 # per core). At 1280x720 with every core it used ~1800% CPU; 640x360 with 4 threads ran as fast at ~400% (2026-10-20).
-SCREEN_W, SCREEN_H = (int(v) for v in os.environ.get("MOD_SCREEN", "640x360").split("x"))
+# This repo: 800x500, since vanilla hides the colonist bar below that (ColonistBar.Visible); same default as env.sh.
+SCREEN_W, SCREEN_H = (int(v) for v in os.environ.get("MOD_SCREEN", "800x500").split("x"))
 RENDER_THREADS = os.environ.get("MOD_RENDER_THREADS", "4")
 RW_EXPECTED_VERSION = "1.6."
 
@@ -91,7 +92,9 @@ DEPS = [m.strip() for m in os.environ.get("MOD_DEPS", "").split(",") if m.strip(
 # Test-only extra mods, loaded after this one (comma-separated packageIds, e.g. another mod a scenario interacts with).
 # Never a dependency of the mod; the scenarios that need one check ModsConfig.IsActive and skip themselves otherwise.
 # The launched set is recorded in EXTRA_MODS_FILE; a run with a different set restarts the instance cold.
-EXTRA_MODS = [m.strip() for m in os.environ.get("MOD_EXTRA_MODS", "").split(",") if m.strip()]
+# Default (same as env.sh): the repo-local test mod Tests/<MOD_NAME>Tests, packageId <MOD_ID>tests, when that directory exists.
+EXTRA_MODS = [m.strip() for m in os.environ.get(
+    "MOD_EXTRA_MODS", MOD_ID + "tests" if (REPO / "Tests" / f"{MOD_NAME}Tests").is_dir() else "").split(",") if m.strip()]
 
 
 # The extra-mod set a save was made with, when a run loads it under EXTRA_MODS (run --switch-mods, second half).
@@ -394,6 +397,30 @@ def ensure_mod_link():
         say(f"installed mod link {MOD_LINK} -> {target}")
 
 
+def link_repo_test_mods():
+    """A test-only mod that lives in this repo (Tests/<dir>/About/About.xml) and is named in DEPS or EXTRA_MODS gets a
+    link in the game's Mods/, like the mod itself, so a repo can ship its own scenario driver beside the mod."""
+    import xml.etree.ElementTree as ET
+    wanted = {m.lower() for m in DEPS + EXTRA_MODS}
+    for about in sorted((REPO / "Tests").glob("*/About/About.xml")):
+        try:
+            pid = (ET.parse(about).getroot().findtext("packageId") or "").strip().lower()
+        except (OSError, ET.ParseError):
+            continue
+        if pid not in wanted:
+            continue
+        target = about.parent.parent.resolve()
+        link = RW_DIR / "Mods" / target.name
+        if link.is_symlink():
+            if link.resolve() != target:
+                die(f"{link} links to {link.resolve()}, not {target}; move it away by hand")
+        elif link.exists():
+            die(f"{link} exists and is not the test mod link; move it away by hand")
+        else:
+            link.symlink_to(target)
+            say(f"installed test mod link {link} -> {target}")
+
+
 def installed_package_ids():
     """Lower-cased packageIds of every workshop item and every folder in the game's Mods/."""
     import xml.etree.ElementTree as ET
@@ -418,6 +445,7 @@ def preflight():
         die("Steam is not running: workshop mods (Harmony) only load while it runs")
     if not (HARMONY_DIR / "About").is_dir():
         die(f"Harmony not found at {HARMONY_DIR}")
+    link_repo_test_mods()
     missing = sorted({m.lower() for m in DEPS + EXTRA_MODS} - installed_package_ids())
     if missing:
         die(f"not installed (workshop or Mods/): {', '.join(missing)}")

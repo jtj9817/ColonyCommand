@@ -10,6 +10,11 @@
 Source/**/bin/
 Source/**/obj/
 
+# Build output of the test-only mod (Tests/ColonyCommandTests, built by tools/build.sh)
+Tests/**/bin/
+Tests/**/obj/
+Tests/**/1.6/Assemblies/
+
 # Build output of the test-only removal probe (tools/autotest.py removal-check)
 tools/removal-probe/bin/
 tools/removal-probe/obj/

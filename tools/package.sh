@@ -9,7 +9,7 @@ if [[ "${1:-}" == -h* || "${1:-}" == --help ]]; then
 fi
 
 [[ -z "$(git_ status --porcelain)" ]] || die "uncommitted changes: commit first, so the build id names a real commit"
-"$HERE/build.sh"
+MOD_BUILD_TESTS=0 "$HERE/build.sh"   # the test-only mod (Tests/) is never part of a package
 
 DIST="$REPO/dist/$MOD_NAME"
 NEW="$REPO/dist/.$MOD_NAME.new"

@@ -36,9 +36,13 @@ HARMONY_DIR="${HARMONY_DIR:-$RW_DIR/../../workshop/content/294100/2009463077}"
 # Test-instance tuning (autotest loop; read by autotest.py — keep both in step)
 MOD_MAP_SIZE="${MOD_MAP_SIZE:-200}"        # quicktest map size (empty: vanilla 250)
 MOD_PKG="${MOD_PKG:-$REPO/dist/$MOD_NAME}" # packaged release copy for autotest.py pkg-run (tools/package.sh)
-MOD_SCREEN="${MOD_SCREEN:-640x360}"        # test instance window (software rendering: smaller is cheaper)
+MOD_SCREEN="${MOD_SCREEN:-800x500}"        # test instance window (software rendering: smaller is cheaper). Vanilla hides the
+                                           # colonist bar below 800x500 (ColonistBar.Visible), so this repo can't go smaller
 MOD_RENDER_THREADS="${MOD_RENDER_THREADS:-4}"  # llvmpipe threads, LP_NUM_THREADS (empty: one per core)
-MOD_EXTRA_MODS="${MOD_EXTRA_MODS:-}"       # test-only packageIds loaded after the mod (comma-separated); a change restarts cold
+# Test-only packageIds loaded after the mod (comma-separated); a change restarts cold. Convention: a repo-local test mod
+# Tests/<MOD_NAME>Tests with packageId <MOD_ID>tests is loaded by default (Harmony allowed there; the shipped assembly
+# never has it); autotest.py links it into Mods/. autotest.py applies the same default when run without env.sh.
+if [[ -d "$REPO/Tests/${MOD_NAME}Tests" ]]; then MOD_EXTRA_MODS="${MOD_EXTRA_MODS:-${MOD_ID}tests}"; else MOD_EXTRA_MODS="${MOD_EXTRA_MODS:-}"; fi
 MOD_DEPS="${MOD_DEPS:-}"                   # required packageIds loaded before the mod, baseline included (comma-separated)
 
 # tools/autotest.py reads these from the environment, also when a shell tool (status.sh) calls it.

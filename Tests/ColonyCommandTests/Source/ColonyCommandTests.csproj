@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Test-only mod: never packaged (tools/package.sh) and never in a player's mod list. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>ColonyCommandTests</RootNamespace>
+    <AssemblyName>ColonyCommandTests</AssemblyName>
+    <Version>0.1.0</Version>
+    <DebugType>embedded</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+    <!-- tools/build.sh installs it into ../1.6/Assemblies with an atomic rename. -->
+    <OutputPath>bin/</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.4871" ExcludeAssets="runtime" />
+    <!-- Compile-only: the Harmony mod (a dependency in About.xml) ships 0Harmony.dll at runtime. -->
+    <PackageReference Include="Lib.Harmony" Version="2.4.3" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- The installed main assembly (tools/build.sh builds and installs it first). Copy Local off: the game loads
+         the real one from the main mod. -->
+    <Reference Include="ColonyCommand">
+      <HintPath>../../../1.6/Assemblies/ColonyCommand.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
