@@ -18,6 +18,8 @@ namespace ColonyCommand
         private readonly QuickSearchWidget search = new QuickSearchWidget();
         private int lastSeenVersion = -1;
         private Placement placement;
+        // Compact layout: the user opened the field from the search icon (a field holding a query is never hidden).
+        private bool searchOpen, pendingFocus;
 
         private LoadedLanguage textLanguage;
         private readonly string[] chipNames = new string[4], chipTips = new string[4], chipLabels = new string[4];
@@ -48,6 +50,15 @@ namespace ColonyCommand
         /// <summary>The chip at this index (0 All, 1 Drafted, 2 Injured, 3 Idle) as last placed; meaningless while the strip is compact.</summary>
         public Rect ChipRect(int index) => chipRects[index];
 
+        /// <summary>
+        /// The search field held keyboard focus at the start of the latest event. <c>GUI.GetNameOfFocusedControl</c> may only be
+        /// asked during OnGUI, so tests read this copy instead.
+        /// </summary>
+        public bool SearchFocused { get; private set; }
+
+        /// <summary>The text of the chip at this index, count included.</summary>
+        public string ChipLabel(int index) => chipLabels[index];
+
         /// <summary>The Reset button of the empty-state line as last placed.</summary>
         public Rect ResetRect => resetRect;
 
@@ -56,7 +67,7 @@ namespace ColonyCommand
         protected override float Margin => 0f;
 
         /// <summary>Null while the controls are hidden, so a hidden field can neither hold focus nor swallow the game's hotkeys.</summary>
-        public override QuickSearchWidget CommonSearchWidget => placement.Visible ? search : null;
+        public override QuickSearchWidget CommonSearchWidget => placement.Visible && placement.SearchFieldShown ? search : null;
 
         protected override void SetInitialSizeAndPosition()
         {
@@ -89,13 +100,13 @@ namespace ColonyCommand
             base.ExtraOnGUI();
             BarAdapter.Apply();
             EnsureTexts();
+            SearchFocused = search.CurrentlyFocused();
             UpdatePlacement();
-            windowRect = placement.Visible ? placement.Search : new Rect(0f, 0f, 0f, 0f);
-            if (!placement.Visible)
-            {
+            windowRect = placement.Visible && placement.SearchFieldShown ? placement.Search : new Rect(0f, 0f, 0f, 0f);
+            if (!placement.Visible || !placement.SearchFieldShown)
                 search.Unfocus();
+            if (!placement.Visible)
                 return;
-            }
             SyncSearchFromState();
             RosterCounts counts = BarAdapter.Counts;
             search.noResultsMatched = ViewState.Snapshot.HasQuery && counts.Eligible > 0 && counts.All == 0;   // the text turns red
@@ -105,11 +116,18 @@ namespace ColonyCommand
                 if (placement.ShowEmpty)
                     DrawEmptyState();
                 DrawStrip();
+                if (placement.SearchCompact)
+                    DrawSearchIcon();
             }
         }
 
         public override void DoWindowContents(Rect inRect)
         {
+            if (pendingFocus)
+            {
+                pendingFocus = false;
+                search.Focus();   // the field was laid out this event: now it exists to be focused
+            }
             // The vanilla widget draws no placeholder: it is ours, over the empty, unfocused field.
             if (!search.filter.Active && !search.CurrentlyFocused())
             {
@@ -176,7 +194,8 @@ namespace ColonyCommand
                 emptySize = Text.CalcSize(noMatches);
             }
             float emptyWidth = emptySize.x + ControlsLayout.Gap * 3f + resetSize.x + 24f;
-            placement = ControlsLayout.Compute(UI.screenWidth, UI.screenHeight, metrics, empty, stripWidth, filtersSize.x + 24f, emptyWidth);
+            placement = ControlsLayout.Compute(UI.screenWidth, UI.screenHeight, metrics, empty, stripWidth, filtersSize.x + 24f, emptyWidth,
+                searchOpen || criteria.HasQuery);
             if (!barShown)
                 placement.Visible = false;
             float x = placement.Strip.x;
@@ -274,6 +293,27 @@ namespace ColonyCommand
             Widgets.Label(rect, label);
             TooltipHandler.TipRegion(rect, tip);
             return Widgets.ButtonInvisible(rect);
+        }
+
+        /// <summary>The compact stand-in for the field: opens it (and focuses it), or closes it again while it holds nothing.</summary>
+        private void DrawSearchIcon()
+        {
+            Rect icon = placement.SearchIcon;
+            if (placement.SearchFieldShown)
+                Widgets.DrawHighlightSelected(icon);
+            TooltipHandler.TipRegion(icon, placeholder);
+            if (!Widgets.ButtonImage(icon, TexButton.Search))
+                return;
+            if (!placement.SearchFieldShown)
+            {
+                searchOpen = true;
+                pendingFocus = true;
+            }
+            else if (!search.filter.Active)
+            {
+                searchOpen = false;
+                search.Unfocus();
+            }
         }
 
         private void DrawEmptyState()

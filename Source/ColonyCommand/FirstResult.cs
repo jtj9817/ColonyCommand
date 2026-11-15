@@ -54,8 +54,8 @@ namespace ColonyCommand
                 CameraJumper.TryJumpAndSelect(pawn.GetCaravan());
                 return true;
             }
-            // A pawn that is on no map (or was destroyed) selects nothing; vanilla would fall through to whatever is under the cursor.
-            if (thing.Destroyed || pawn.IsWorldPawn() || thing.SpawnedParentOrMe == null)
+            // Something that is on no map (a world pawn, a destroyed thing) selects nothing, as vanilla's Select would only log an error for it; vanilla would fall through to whatever is under the cursor.
+            if (thing.Destroyed || (thing is Pawn selectable && selectable.IsWorldPawn()) || thing.SpawnedParentOrMe == null)
                 return false;
             Find.Selector.ClearSelection();
             Find.Selector.Select(thing);   // switches the map and jumps the camera itself when the pawn is on another map

@@ -192,6 +192,14 @@ namespace ColonyCommandTests
                 r.Last = "the bar is dirty (repair pending)";
                 return false;
             }
+            // The bar must hold the view of the CURRENT criteria: a view that happens to show the same cast members as the
+            // one before (or as vanilla) would otherwise pass before it was ever built.
+            bool identity = ViewState.Snapshot.IsIdentity;
+            if (identity ? BarAdapter.Applied : !BarAdapter.Applied || BarAdapter.AppliedVersion != ViewState.Version)
+            {
+                r.Last = $"the bar does not hold the view of the current criteria yet (applied {BarAdapter.Applied}, built for version {BarAdapter.AppliedVersion}, now {ViewState.Version})";
+                return false;
+            }
             List<ColonistBar.Entry> cached = BarProbe.CachedEntries(bar);
             string problem = LayoutProblem(bar, cached.Count);
             if (problem != null)

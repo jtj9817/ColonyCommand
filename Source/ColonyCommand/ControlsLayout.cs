@@ -23,8 +23,15 @@ namespace ColonyCommand
     {
         /// <summary>False below 800x500, with the bar hidden: nothing is drawn and nothing takes input.</summary>
         public bool Visible;
-        /// <summary>The search field, right of the portrait area (also the window's rect).</summary>
+        /// <summary>
+        /// The search field (also the window's rect), when <see cref="SearchFieldShown"/>: right of the portrait area when there
+        /// is room, else (compact) in a row under the chip strip.
+        /// </summary>
         public Rect Search;
+        public bool SearchFieldShown;
+        /// <summary>There is no room for the field beside the portraits (the alerts are at the right): a search icon stands in for it.</summary>
+        public bool SearchCompact;
+        public Rect SearchIcon;
         /// <summary>The "No matching colonists" line, in the place of the empty bar. Meaningful when <see cref="ShowEmpty"/>.</summary>
         public Rect Empty;
         public bool ShowEmpty;
@@ -34,10 +41,12 @@ namespace ColonyCommand
     }
 
     /// <summary>
-    /// Pure geometry, so it can be asserted with synthetic bars: the search field sits right of the portraits, the chip row
-    /// under everything the bar draws, and neither ever overlaps a portrait or leaves the screen. The vanilla bar is at most
-    /// <c>screenWidth - 520</c> wide and centered (260 px free on each side), and is hidden below 800x500, so on every
-    /// screen where the controls show there is room for the field to the right of the bar.
+    /// Pure geometry, so it can be asserted with synthetic bars: the search field sits right of the portraits when there is
+    /// room, the chip row under everything the bar draws, and nothing overlaps a portrait, the vanilla alert column
+    /// (154 px wide at the right edge, growing up to the top of the screen) or the screen's edge. The vanilla bar is at most
+    /// <c>screenWidth - 520</c> wide and centered (260 px free on each side) and is hidden below 800x500; with the alerts
+    /// taking 154 of those 260 px, a full bar leaves only about 90 px for the field, so the field collapses to a search icon
+    /// whose opened field goes in a row under the chips (spec section 2, responsive behavior).
     /// </summary>
     public static class ControlsLayout
     {
@@ -49,44 +58,56 @@ namespace ColonyCommand
         /// <summary>The narrowest bar the layout is built around: the controls never come closer than this to the middle.</summary>
         public const float MinHalfBar = 140f;
         public const float SearchWidth = 220f;
-        public const float MinSearchWidth = 120f;
+        /// <summary>Narrower than this the placeholder and the typed text no longer fit: the field collapses to an icon.</summary>
+        public const float MinInlineSearchWidth = 170f;
+        public const float IconSize = 24f;
+        /// <summary>The vanilla alert column (<c>AlertsReadout</c>): 154 px at the right edge.</summary>
+        public const float AlertsWidth = 154f;
         public const float MinScreenWidth = 800f, MinScreenHeight = 500f;
 
         public static Placement Compute(float screenWidth, float screenHeight, BarMetrics bar, bool showEmpty,
-            float stripWidth, float filtersButtonWidth, float emptyWidth)
+            float stripWidth, float filtersButtonWidth, float emptyWidth, bool searchOpen = false)
         {
             var p = new Placement { Visible = screenWidth >= MinScreenWidth && screenHeight >= MinScreenHeight };
             if (!p.Visible)
                 return p;
             float center = screenWidth / 2f;
+            float rightLimit = screenWidth - AlertsWidth - SideMargin;   // nothing of ours goes under the alert column
 
             // Search: right of the portrait area, level with the first row.
             float anchor = center + MinHalfBar;
             if (bar.HasPortraits && !showEmpty)
                 anchor = Mathf.Max(anchor, bar.MaxX);
             float x = anchor + SideMargin;
-            float width = Mathf.Min(SearchWidth, screenWidth - SideMargin - x);
-            if (width < MinSearchWidth)
-            {
-                width = MinSearchWidth;
-                x = screenWidth - SideMargin - width;
-            }
+            float span = rightLimit - x;
             float y = RowTop + (bar.HasPortraits && !showEmpty ? Mathf.Max(0f, (bar.PortraitHeight - ControlHeight) / 2f) : 0f);
-            p.Search = new Rect(x, y, width, ControlHeight);
+            p.SearchCompact = span < MinInlineSearchWidth;
+            if (!p.SearchCompact)
+            {
+                p.Search = new Rect(x, y, Mathf.Min(SearchWidth, span), ControlHeight);
+                p.SearchFieldShown = true;
+            }
+            else
+            {
+                p.SearchIcon = new Rect(Mathf.Min(x, rightLimit - IconSize), y, IconSize, ControlHeight);
+                p.SearchFieldShown = searchOpen;
+            }
 
             // Empty state: in the place of the portraits, in the top row.
             p.ShowEmpty = showEmpty;
             if (showEmpty)
             {
-                float w = Mathf.Min(emptyWidth, screenWidth - 2f * SideMargin);
-                p.Empty = new Rect(Mathf.Clamp(center - w / 2f, SideMargin, screenWidth - SideMargin - w), RowTop, w, ControlHeight);
+                float w = Mathf.Min(emptyWidth, rightLimit - SideMargin);
+                p.Empty = new Rect(Mathf.Clamp(center - w / 2f, SideMargin, rightLimit - w), RowTop, w, ControlHeight);
             }
 
             // Strip: under everything the bar draws (or under the empty-state line).
             float top = showEmpty || !bar.HasPortraits ? RowTop + ControlHeight : bar.BottomY;
-            p.StripCompact = stripWidth > screenWidth - 2f * SideMargin;
-            float sw = p.StripCompact ? Mathf.Min(filtersButtonWidth, screenWidth - 2f * SideMargin) : stripWidth;
-            p.Strip = new Rect(Mathf.Clamp(center - sw / 2f, SideMargin, screenWidth - SideMargin - sw), top + Gap, sw, ControlHeight);
+            p.StripCompact = stripWidth > rightLimit - SideMargin;
+            float sw = p.StripCompact ? Mathf.Min(filtersButtonWidth, rightLimit - SideMargin) : stripWidth;
+            p.Strip = new Rect(Mathf.Clamp(center - sw / 2f, SideMargin, rightLimit - sw), top + Gap, sw, ControlHeight);
+            if (p.SearchCompact && searchOpen)   // the opened field: a row of its own under the chips
+                p.Search = new Rect(p.Strip.x, p.Strip.yMax + Gap, Mathf.Min(SearchWidth, rightLimit - p.Strip.x), ControlHeight);
             return p;
         }
 

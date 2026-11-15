@@ -29,6 +29,10 @@ namespace ColonyCommandTests
             ("Sort and restore", SortAndRestore),
             ("Bar integrity", BarIntegrity),
             ("View reset on load", ViewResetOnLoad),
+            ("Search field", SearchField),
+            ("Search Enter", SearchEnter),
+            ("Chip clicks", ChipClicks),
+            ("Empty state", EmptyState),
         };
 
         /// <summary>

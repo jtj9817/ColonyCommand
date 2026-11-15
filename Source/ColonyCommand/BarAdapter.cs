@@ -54,6 +54,9 @@ namespace ColonyCommand
         /// <summary>Our view is currently written into the bar.</summary>
         public static bool Applied => applied;
 
+        /// <summary><see cref="ViewState.Version"/> the written view was built for (meaningful while <see cref="Applied"/>).</summary>
+        public static int AppliedVersion => appliedVersion;
+
         private const string ScaleFieldName = "cachedScale";
 
         /// <summary>Resolves the private field once. Fails closed: feature off and one error, never a per-frame exception.</summary>

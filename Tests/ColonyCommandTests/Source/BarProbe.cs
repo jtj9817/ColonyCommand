@@ -190,3 +190,37 @@ namespace ColonyCommandTests
         public static bool Prefix() => !BarProbe.SuppressWindowHooks;
     }
 }
+
+namespace ColonyCommandTests
+{
+    /// <summary>
+    /// Records the keyboard and mouse events the game's OnGUI actually receives (seen at the top of the mod window's
+    /// <c>ExtraOnGUI</c>, i.e. before the controls handle them): whether xdotool's input arrived at all is the first question
+    /// when a real-input scenario fails.
+    /// </summary>
+    public static class InputProbe
+    {
+        public static readonly System.Collections.Generic.List<string> Events = new System.Collections.Generic.List<string>();
+
+        public static void Clear() => Events.Clear();
+
+        internal static void Record()
+        {
+            Event e = Event.current;
+            if (e.type == EventType.Layout || e.type == EventType.Repaint || Events.Count > 200)
+                return;
+            if (e.isKey)
+                Events.Add($"f{Time.frameCount} {e.type} {e.keyCode} '{(e.character == 0 ? ' ' : e.character)}'");
+            else if (e.isMouse)
+                Events.Add($"f{Time.frameCount} {e.type} b{e.button} ({e.mousePosition.x:F0},{e.mousePosition.y:F0})");
+        }
+
+        public static string Describe() => string.Join(" | ", Events);
+    }
+
+    [HarmonyPatch(typeof(ColonyCommandWindow), nameof(ColonyCommandWindow.ExtraOnGUI))]
+    public static class Patch_Window_ExtraOnGUI_Input
+    {
+        public static void Prefix() => InputProbe.Record();
+    }
+}
