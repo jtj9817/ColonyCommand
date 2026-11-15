@@ -2,7 +2,7 @@
 <ModMetaData>
   <name>Colony Command</name>
   <author>jtj9817</author>
-  <modVersion>0.1.0</modVersion>
+  <modVersion>1.0.0</modVersion>
   <packageId>josh9817.colonycommand</packageId>
   <supportedVersions>
     <li>1.6</li>

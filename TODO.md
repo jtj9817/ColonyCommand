@@ -274,9 +274,9 @@ Defaults taken in Phase 5 (record; change only if the user says so):
 ## Phase 7 — Right-column panel, Inspired filter, colour scheme (user request, 2026-11-15)
 
 Design and verified engine facts: `docs/plan.md` §1.3 (Placement, Look) and §1.4 (Inspired).
-Proof: `docs/test-runs.md` row 2026-11-15 07:36 (11/11 PASS on the final code, build `1041c2b-dirty`: the work is not committed yet),
-the development runs 07:18-07:29 and the mutation checks 07:30 and 07:32 (five deliberate bugs, each caught by the intended scenario).
-`tools/palette-check.py`: 96/96 checks.
+Proof: `docs/test-runs.md` row 2026-11-15 07:36 (11/11 PASS on the final code, build `1041c2b-dirty`; the work is committed since as
+`9ff99d6` and `f02844e`), the development runs 07:18-07:29 and the mutation checks 07:30 and 07:32 (five deliberate bugs, each caught by
+the intended scenario). `tools/palette-check.py`: 96/96 checks (rerun 2026-11-15, after the release-prep edits: still 96/96).
 
 - [x] Panel in the right column under the Learning Helper; folds when the column is too short; follows the helper; never
       overlaps the bar, the helper or the alerts; swallows clicks between its controls — `Controls placement`, `Chip clicks`
@@ -291,6 +291,19 @@ the development runs 07:18-07:29 and the mutation checks 07:30 and 07:32 (five d
       many of them the panel folds to the search field plus a Filters menu, and when even that does not fit it overlaps the top
       alert; and in the harness about 2 of 13 real chip clicks arrived but did nothing and had to be resent (the game had received
       them; cause not proven; same family as the Phase 3 note below): does a real mouse ever miss a chip?
+
+## Release 1 — official packaging (user request, 2026-11-15)
+
+- [x] `About/About.xml` modVersion 0.1.0 → **1.0.0**
+- [x] `About/Preview.png` — the promotional cover cropped to 16:9, with the title **COLONY COMMAND** and the tagline
+      **Find colonists without leaving the map.** set in the open sky area; downscaled to 640×360 (under 1 MB, `rwdefs.py` lint)
+- [x] `LICENSE` added (MIT, copyright (c) 2026 jtj9817; the package carries it, `README.md` links it)
+- [x] `CHANGELOG.md` added (the package carries it; Steam release notes)
+- [ ] Rebuilt package in `dist/ColonyCommand` with the above (`tools/package.sh`) — the `dist/` built at 03:20 local was stale
+      (build `214b083`, before the README commit, without Preview/LICENSE/CHANGELOG)
+- [ ] Release gate (user-approved 2026-11-15): full `autotest.py pkg-run` on the packaged copy
+- [ ] Steam Workshop publication — the user's step (needs their Steam account; the upload source is `dist/ColonyCommand`)
+- The remaining Phase 6/Phase 7 boxes are user-in-the-loop and stay open until the user confirms them in-game.
 
 ## Noted, out of scope (spec §6.2)
 

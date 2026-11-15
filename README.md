@@ -43,6 +43,6 @@ tools/package.sh   # clean package → dist/ColonyCommand
 
 ## License
 
-This project is licensed under the MIT License. The license text is not distributed as a separate file; it applies to the source in this repository.
+This project is licensed under the MIT License — see [`LICENSE`](LICENSE).
 
-The promotional cover artwork in `assets/artwork/` is original AI-generated illustration and is not an in-game screenshot — see [`assets/artwork/README.md`](assets/artwork/README.md).
+The mod's `About/Preview.png` is the promotional cover illustration (AI-generated, not an in-game screenshot) with the mod title and tagline set over it. The artwork itself is described in [`assets/artwork/README.md`](assets/artwork/README.md).
