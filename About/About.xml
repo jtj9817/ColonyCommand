@@ -7,11 +7,15 @@
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
-  <description>Search, filter and sort the colonist bar at the top of the screen.
+  <description>Find colonists without leaving the map. Colony Command adds a panel to the vanilla colonist bar for searching, filtering and sorting your roster.
 
-Name search, status filters (drafted, injured, idle), a skill filter and sorting, all on the vanilla colonist bar, without leaving the map.
+- Search by name.
+- Filter by Drafted, Injured, Idle or Inspired status.
+- Filter by skill and minimum level.
+- Sort by name, mood or the selected skill, or restore vanilla order.
+- Reset the controls to show the original bar.
 
-UI only: it changes what the bar shows, never your colonists. It stores nothing in your save games and can be added or removed at any time.
+The panel sits below the Learning Helper and folds into a compact menu when space is limited. Filters and sorting only change the displayed view; they do not change colonists or their saved order. UI state is not saved and resets when a game is loaded.
 
-Requires RimWorld 1.6. No DLC and no other mods required.</description>
+Requires RimWorld 1.6 and Core only. No DLC or other mods are required. Can be added to or removed from an existing save.</description>
 </ModMetaData>
