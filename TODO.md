@@ -134,8 +134,9 @@ Proof: `docs/test-runs.md` rows 2026-11-15 02:12–02:16 (clean build `080d033`:
 - [x] Scenarios `Name search`, `Status chips`, `Combined filter`, `Sort and restore`, `Bar integrity`,
       `View reset on load` (each with a stated failure mode; mutation-checked: case-sensitive match, flipped tie order
       and ordinal name sort were each caught)
-- [ ] Delete the probe (`BarAdapter.ProbeView`/`ProbeKeeps`, the debug action, the probe-based oracle) in one dedicated
-      commit after migrating the `Seam *` scenarios to the real view (decision "open point 2" above)
+- [x] Delete the probe (`BarAdapter.ProbeView`/`ProbeKeeps`, the debug action, the probe-based oracle) in one dedicated
+      commit after migrating the `Seam *` scenarios to the real view (decision "open point 2" above) — commit `04f371f`;
+      run 2026-11-15 02:20: all nine `Seam *` scenarios and the six Phase 2 scenarios 15/15 PASS against the real view
 
 Defaults taken in Phase 2 (record; change only if the user says so):
 
