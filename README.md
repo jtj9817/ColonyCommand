@@ -29,7 +29,7 @@ The panel sits below the Learning Helper and folds into a compact menu when spac
 
 ## Installation
 
-1. Download or clone this repository into your RimWorld `Mods` folder (or subscribe via the Steam Workshop once published).
+1. Copy the packaged `dist/ColonyCommand` (built by `tools/package.sh`, or from an official release archive) into RimWorld's `Mods` folder — or clone this repository there, the repository root is itself a valid mod.
 2. Enable **Colony Command** in the in-game mod list.
 
 ## Building from source

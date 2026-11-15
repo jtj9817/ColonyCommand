@@ -291,6 +291,9 @@ the intended scenario). `tools/palette-check.py`: 96/96 checks (rerun 2026-11-15
       many of them the panel folds to the search field plus a Filters menu, and when even that does not fit it overlaps the top
       alert; and in the harness about 2 of 13 real chip clicks arrived but did nothing and had to be resent (the game had received
       them; cause not proven; same family as the Phase 3 note below): does a real mouse ever miss a chip?
+      — **First play-test done (user, 2026-11-15, screenshot in chat): the panel works in a live colony** (search `robyn` → All 1,
+      Inspired 1; panel under the Learning Helper; selection marker visible). Display resolution/UI scale unrecorded; the display
+      matrix, Learning Helper off/alerts states and the real-mouse question stay open for this box.
 
 ## Release 1 — official packaging (user request, 2026-11-15)
 
@@ -299,10 +302,16 @@ the intended scenario). `tools/palette-check.py`: 96/96 checks (rerun 2026-11-15
       **Find colonists without leaving the map.** set in the open sky area; downscaled to 640×360 (under 1 MB, `rwdefs.py` lint)
 - [x] `LICENSE` added (MIT, copyright (c) 2026 jtj9817; the package carries it, `README.md` links it)
 - [x] `CHANGELOG.md` added (the package carries it; Steam release notes)
-- [ ] Rebuilt package in `dist/ColonyCommand` with the above (`tools/package.sh`) — the `dist/` built at 03:20 local was stale
-      (build `214b083`, before the README commit, without Preview/LICENSE/CHANGELOG)
-- [ ] Release gate (user-approved 2026-11-15): full `autotest.py pkg-run` on the packaged copy
-- [ ] Steam Workshop publication — the user's step (needs their Steam account; the upload source is `dist/ColonyCommand`)
+- [x] Rebuilt package in `dist/ColonyCommand` with the above (`tools/package.sh`) — the `dist/` built at 03:20 local was stale
+      (build `214b083`, before the README commit, without Preview/LICENSE/CHANGELOG). Rebuilt again after the assembly was stamped
+      1.0.0: build `a78f8fc.20261115T090827Z`
+- [ ] Release gate (user-approved 2026-11-15): full `autotest.py pkg-run` on the packaged copy — first run on build `55cb0cc`
+      PASSED 30/30 with 0 new errors; re-run on `a78f8fc` pending/running
+- [x] Steam Workshop publication — **not pursuing** (user, 2026-11-15): the mod is distributed as the packaged
+      `dist/ColonyCommand`; no Workshop entry is planned
+- Play-test (user, 2026-11-15, screenshot in chat): the panel works in a live colony — search `robyn` → **All 1**, **Inspired 1**,
+      Drafted/Injured/Idle 0; Skill and Sort controls present; panel sits under the Learning Helper with the orange selection
+      marker. Display resolution and UI scale of that session not recorded; Core-only and logged checks still tracked below
 - The remaining Phase 6/Phase 7 boxes are user-in-the-loop and stay open until the user confirms them in-game.
 
 ## Noted, out of scope (spec §6.2)
