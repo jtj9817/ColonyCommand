@@ -72,17 +72,8 @@ namespace ColonyCommand
                             rows.Add(new Row { Entry = entry, Index = i });
                         continue;
                     }
-                    counts.Eligible++;
-                    if (!Predicates.NameMatches(pawn, criteria.Query))
+                    if (!Tally(pawn, criteria.Query, ref counts, out bool drafted, out bool injured, out bool idle))
                         continue;
-                    counts.All++;
-                    bool drafted = Predicates.Drafted(pawn), injured = Predicates.Injured(pawn), idle = Predicates.Idle(pawn);
-                    if (drafted)
-                        counts.Drafted++;
-                    if (injured)
-                        counts.Injured++;
-                    if (idle)
-                        counts.Idle++;
                     if (!StatusPasses(criteria.Status, drafted, injured, idle))
                         continue;
                     int skill = needSkill ? Predicates.SkillLevel(pawn, criteria.Skill) : 0;
@@ -115,6 +106,40 @@ namespace ColonyCommand
             }
             rows.Clear();   // keep no pawn references between calls
             return groups;
+        }
+
+        /// <summary>
+        /// Chip counts only, for a bar that is not filtered (nothing is written anywhere): the same tally <see cref="Build"/> makes.
+        /// </summary>
+        public static RosterCounts Count(List<ColonistBar.Entry> vanilla, string trimmedQuery)
+        {
+            RosterCounts counts = default;
+            for (int i = 0; i < vanilla.Count; i++)
+            {
+                if (vanilla[i].pawn != null)
+                    Tally(vanilla[i].pawn, trimmedQuery, ref counts, out _, out _, out _);
+            }
+            return counts;
+        }
+
+        /// <summary>Counts one pawn (spec §3.2: eligible, then name-matching, then each chip) and hands back its status flags.</summary>
+        private static bool Tally(Pawn pawn, string query, ref RosterCounts counts, out bool drafted, out bool injured, out bool idle)
+        {
+            drafted = injured = idle = false;
+            counts.Eligible++;
+            if (!Predicates.NameMatches(pawn, query))
+                return false;
+            counts.All++;
+            drafted = Predicates.Drafted(pawn);
+            injured = Predicates.Injured(pawn);
+            idle = Predicates.Idle(pawn);
+            if (drafted)
+                counts.Drafted++;
+            if (injured)
+                counts.Injured++;
+            if (idle)
+                counts.Idle++;
+            return true;
         }
 
         private static bool StatusPasses(StatusFilter status, bool drafted, bool injured, bool idle)

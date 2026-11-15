@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <!-- Search (spec section 2) -->
+  <ColonyCommand_SearchPlaceholder>Search colonist by name</ColonyCommand_SearchPlaceholder>
+
+  <!-- Status chips (spec section 3.2). {0} is the live count. -->
+  <ColonyCommand_ChipAll>All</ColonyCommand_ChipAll>
+  <ColonyCommand_ChipDrafted>Drafted</ColonyCommand_ChipDrafted>
+  <ColonyCommand_ChipInjured>Injured</ColonyCommand_ChipInjured>
+  <ColonyCommand_ChipIdle>Idle</ColonyCommand_ChipIdle>
+  <ColonyCommand_ChipWithCount>{0} {1}</ColonyCommand_ChipWithCount>
+  <ColonyCommand_ChipAllTip>Every colonist matching the search. Clears the status and skill filters.</ColonyCommand_ChipAllTip>
+  <ColonyCommand_ChipDraftedTip>Colonists that are drafted right now. Click again to turn the filter off.</ColonyCommand_ChipDraftedTip>
+  <ColonyCommand_ChipInjuredTip>Colonists with a current injury that can heal. Scars do not count. Click again to turn the filter off.</ColonyCommand_ChipInjuredTip>
+  <ColonyCommand_ChipIdleTip>Colonists the colonist bar shows the idle icon for. Click again to turn the filter off.</ColonyCommand_ChipIdleTip>
+
+  <!-- Empty state (FR-04) -->
+  <ColonyCommand_NoMatches>No matching colonists</ColonyCommand_NoMatches>
+  <ColonyCommand_Reset>Reset</ColonyCommand_Reset>
+  <ColonyCommand_ResetTip>Clear the search, filters and sorting and show the colonist bar as the game has it.</ColonyCommand_ResetTip>
+
+  <!-- Compact layout: the chips fold into one menu when there is no room for them -->
+  <ColonyCommand_Filters>Filters</ColonyCommand_Filters>
+
+</LanguageData>

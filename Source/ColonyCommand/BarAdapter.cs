@@ -29,8 +29,15 @@ namespace ColonyCommand
         private static ColonistBarDrawLocsFinder drawLocsFinder;
         private static readonly List<ColonistBar.Entry> view = new List<ColonistBar.Entry>();
         private static bool applied;
-        private static int appliedVersion;
+        private static int appliedVersion, shown;
         private static RosterCounts counts;
+        private static float nextRefresh;
+
+        /// <summary>
+        /// How often the view and the chip counts are re-evaluated against the live game (real time): a colonist drafted or
+        /// injured changes no roster, so nothing else would tell the bar.
+        /// </summary>
+        public const float RefreshSeconds = 0.25f;
 
         /// <summary>False when the private member this relies on is missing (one logged error, then the bar stays vanilla).</summary>
         public static bool Enabled { get; private set; }
@@ -40,6 +47,9 @@ namespace ColonyCommand
         /// skill criteria). Default (all zero) while no view has been built.
         /// </summary>
         public static RosterCounts Counts => counts;
+
+        /// <summary>Colonists (pawn entries) the bar shows right now: with nothing active, the eligible ones. 0 behind an empty state.</summary>
+        public static int Shown => shown;
 
         /// <summary>Our view is currently written into the bar.</summary>
         public static bool Applied => applied;
@@ -88,26 +98,41 @@ namespace ColonyCommand
             ColonistBar bar = Find.ColonistBar;
             Criteria criteria = ViewState.Snapshot;
             int version = ViewState.Version;
+            float now = Time.realtimeSinceStartup;
+            bool refreshDue = now >= nextRefresh;
             if (criteria.IsIdentity)
             {
                 if (applied)
                 {
                     applied = false;
-                    counts = default;
                     bar.MarkColonistsDirty();   // vanilla rebuilds the roster and the layout on its next read
+                    refreshDue = true;
+                }
+                if (refreshDue)
+                {
+                    nextRefresh = now + RefreshSeconds;
+                    counts = RosterView.Count(bar.Entries, criteria.Query);   // the bar is vanilla: nothing of ours in the list
+                    shown = counts.Eligible;
                 }
                 return;
             }
-            // Built from this very request? Then only a vanilla rebuild (a list that is no longer ours) needs repairing.
-            bool upToDate = applied && appliedVersion == version;
+            // Built from this very request and not due for a look at the live game? Then only a vanilla rebuild (a list that
+            // is no longer ours) needs repairing.
+            bool upToDate = applied && appliedVersion == version && !refreshDue;
             if (!upToDate)
                 bar.MarkColonistsDirty();   // start from a fresh vanilla cache (this also resets its reorder groups)
             List<ColonistBar.Entry> entries = bar.Entries;   // vanilla recaches here when it was marked dirty
             if (upToDate && IsView(entries))
                 return;
             int groups = RosterView.Build(entries, criteria, view, out counts);
+            shown = 0;
             for (int i = 0; i < view.Count; i++)
+            {
                 view[i] = Stamp(view[i]);
+                if (view[i].pawn != null)
+                    shown++;
+            }
+            nextRefresh = now + RefreshSeconds;
             entries.Clear();
             entries.AddRange(view);
             view.Clear();   // keep no pawn references between calls
@@ -143,6 +168,7 @@ namespace ColonyCommand
             Enabled = false;
             applied = false;
             counts = default;
+            shown = 0;
             view.Clear();
             CC.Error(error);
             try
