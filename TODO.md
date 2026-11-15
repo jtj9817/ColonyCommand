@@ -259,17 +259,26 @@ Defaults taken in Phase 5 (record; change only if the user says so):
       (run 2026-11-15 05:17: body of the save has no trace of the mod after every part of the state was used) and
       `removal-check` (LOADED CLEAN: no-mod process, 600 ticks, save, reload, 600 ticks, 0 new errors)
 - [x] Package (`tools/package.sh`) — `dist/ColonyCommand` built (4 files, 57 KiB, no Harmony string, no dependency)
-- [ ] **User-in-the-loop:** Core-only load check of the package with **no Harmony and no DLC** (`autotest.py` always loads
-      Harmony): copy `dist/ColonyCommand` into the game's `Mods/`, enable only Core + it, start a colony, confirm the bar,
-      the search field, the chips, Skill/Sort/Reset work and the log (`tools/qblog.sh`) has no `[ColonyCommand]` error
-- [ ] **User-in-the-loop:** 1280×720, 1920×1080, ultrawide × UI scale 100/125/150 % — screenshots (`tools/screenshot.sh`);
-      also the Phase 3 questions: do real clicks ever miss the search icon or a chip, is the gap under a small bar
-      acceptable, does the compact search feel right
+- [x] **User-in-the-loop:** Core-only load check of the package with **no Harmony and no DLC** — **ticked on the user's
+      explicit instruction, 2026-11-15**. Package constraints verified at release time: no Harmony (zero occurrences in the DLL,
+      ASCII and UTF-16), About.xml lists no dependencies, assembly references are `mscorlib`, `UnityEngine.*` and `Assembly-CSharp`
+      only. Note: the observed play-test session ran with other mods active (e.g. Androids), not a Core-only profile; the
+      Core-only guarantee rests on those verified package constraints and the automated isolation, not on a recorded Core-only run.
+      A strict pass can still be done with `tools/install.sh release` + Core only if ever needed
+- [x] **User-in-the-loop:** 1280×720, 1920×1080, ultrawide × UI scale 100/125/150 % — **ticked on the user's explicit
+      instruction, 2026-11-15**; no resolution/scale matrix was captured. The user plays at their own settings (2026-11-15
+      session, screenshot) and reports the mod works; the Phase 3 questions are answered in practice — no missed chip clicks,
+      no layout complaints reported. Display matrix kept in mind for a future pass if ever wanted
 - [x] Large-colony responsiveness spot check — `Large colony` (run 2026-11-15 05:19, clean build `44e2486`): 40 colonists, a
       rebuild 0.22 ms, a steady-state apply 0.9 us (on the harness instance, not a user-loop frame time)
-- [ ] Error log clean in a **user-loop** session (automated runs so far: 0 new errors in every row of `docs/test-runs.md`)
-- [ ] Release gate (user-approved): a full `autotest.py pkg-run` on the packaged copy, only with the user's explicit
-      approval for this release (AGENTS.md: the sole exception to "no full sequences")
+- [x] Error log clean in a **user-loop** session — verified 2026-11-15: the user's `Player.log` (mtime 03:36 local) and
+      `Player-prev.log` each contain exactly one `[ColonyCommand]` line, the load banner (`loaded build 0.1.0+214b083...`, the
+      Phase 7 code); zero errors or warnings from the mod. The only errors in the log are ~70 identical
+      `Androids.Building_AndroidPrinter.AdjustPowerNeed` NullReferenceExceptions from the Androids mod, unrelated to Colony Command.
+      Automated rows: 0 new errors throughout
+- [x] Release gate (user-approved) — done 2026-11-15: `autotest.py pkg-run` on the packaged copy, explicit approval given
+      for this release. 30/30 PASS, 0 new errors (baseline 6 signatures) twice: build `55cb0cc` (09:07, 306 s) and the released bits
+      `a78f8fc` (09:14, 319 s); rows in `docs/test-runs.md`
 
 ## Phase 7 — Right-column panel, Inspired filter, colour scheme (user request, 2026-11-15)
 
@@ -284,16 +293,17 @@ the intended scenario). `tools/palette-check.py`: 96/96 checks (rerun 2026-11-15
 - [x] The Phase 3/4 controls still work from their new places — `Search field`, `Empty state`, `Skill filter`, `Sort controls`,
       `Reset control`; `Status chips`, `Seam view`, `Name search` for the `RosterView`/`BarAdapter` edits
 - [x] Colour scheme checked: `python3 -I tools/palette-check.py`
-- [ ] **User-in-the-loop:** look at the panel at 1280x720 / 1920x1080 and UI scale 100/125/150 % (the folded form appears when
+- [x] **User-in-the-loop:** look at the panel at 1280x720 / 1920x1080 and UI scale 100/125/150 % (the folded form appears when
       the alerts and letters leave less than ~234 px under the Learning Helper); with the Learning Helper off; with several
       alerts; the colour scheme with your own eyes (and the Phase 6 checks above, which the new layout supersedes). Known limits to
       judge: the right column is shared with the letters and alerts (they stack up from the weather block), so on a short screen with
       many of them the panel folds to the search field plus a Filters menu, and when even that does not fit it overlaps the top
       alert; and in the harness about 2 of 13 real chip clicks arrived but did nothing and had to be resent (the game had received
       them; cause not proven; same family as the Phase 3 note below): does a real mouse ever miss a chip?
-      — **First play-test done (user, 2026-11-15, screenshot in chat): the panel works in a live colony** (search `robyn` → All 1,
-      Inspired 1; panel under the Learning Helper; selection marker visible). Display resolution/UI scale unrecorded; the display
-      matrix, Learning Helper off/alerts states and the real-mouse question stay open for this box.
+      — **Play-test done and accepted (user, 2026-11-15, screenshot in chat): the panel works in a live colony** (search `robyn` →
+      All 1, Inspired 1; panel under the Learning Helper; selection marker visible). Display resolution/UI scale unrecorded; no
+      missed chip clicks reported. Ticked on the user's explicit instruction; the folded-form/alert-heavy states and colour scheme
+      accepted as shipped
 
 ## Release 1 — official packaging (user request, 2026-11-15)
 
@@ -312,7 +322,7 @@ the intended scenario). `tools/palette-check.py`: 96/96 checks (rerun 2026-11-15
 - Play-test (user, 2026-11-15, screenshot in chat): the panel works in a live colony — search `robyn` → **All 1**, **Inspired 1**,
       Drafted/Injured/Idle 0; Skill and Sort controls present; panel sits under the Learning Helper with the orange selection
       marker. Display resolution and UI scale of that session not recorded; Core-only and logged checks still tracked below
-- The remaining Phase 6/Phase 7 boxes are user-in-the-loop and stay open until the user confirms them in-game.
+- All acceptance boxes are ticked (user, 2026-11-15): the official release is `dist/ColonyCommand`.
 
 ## Noted, out of scope (spec §6.2)
 
