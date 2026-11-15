@@ -1,3 +1,4 @@
+using UnityEngine;
 using Verse;
 
 namespace ColonyCommand
@@ -10,6 +11,11 @@ namespace ColonyCommand
         {
             // Always printed: tools/autotest.py and tools/status.sh compare it with .devlog/last-build.
             Verse.Log.Message($"{CC.Tag} loaded build {CC.BuildId}");
+            BarAdapter.Resolve();
+            // Unity objects can only be created on the main thread, which this is (Mod constructors run on a loader thread).
+            var go = new GameObject("ColonyCommand.Bootstrap");
+            UnityEngine.Object.DontDestroyOnLoad(go);
+            go.AddComponent<Bootstrap>();
         }
     }
 }
