@@ -29,10 +29,13 @@ filter/sort is active; skill presets Any/0/5/10/15; packageId `josh9817.colonyco
       (`net472`, `Krafs.Rimworld.Ref 1.6.4871`, no Harmony reference), empty `Mod` class; `tools/build.sh` passes
       (build + lint clean; the DLL's assembly references are `mscorlib` and `Assembly-CSharp` only, read with
       `System.Reflection.Metadata`)
-- [ ] Test-only mod skeleton `Tests/ColonyCommandTests/` (adapted `AutoTest.cs`; About.xml declares Harmony as a
+- [x] Test-only mod skeleton `Tests/ColonyCommandTests/` (adapted `AutoTest.cs`; About.xml declares Harmony as a
       dependency so it loads even if unused) wired through
       `MOD_EXTRA_MODS`; check how `autotest.py`/`build.sh` must build it (tooling change → port rule)
-- [ ] `docs/test-runs.md`; `tools/autotest.py baseline`
+      (proven by run `Harness wiring`, `docs/test-runs.md` 2026-11-15 00:58. `build.sh` now also builds
+      `Tests/<MOD_NAME>Tests`, `package.sh` skips it, `autotest.py` links repo-local test mods into `Mods/`,
+      `MOD_EXTRA_MODS` defaults to `<MOD_ID>tests`, `MOD_SCREEN` to 800x500 — see "Noted" for the port)
+- [x] `docs/test-runs.md`; `tools/autotest.py baseline` (6 vanilla-noise signatures, no `[ColonyCommand]` in the log)
 
 ## Phase 1 — Prove the zero-dependency seam (spec §6.1 step 1) — go/no-go gate
 
@@ -85,3 +88,10 @@ filter/sort is active; skill presets Any/0/5/10/15; packageId `josh9817.colonyco
 ## Noted, out of scope (spec §6.2)
 
 Passion filter, work groups, pinned colonists, overview panel, custom shortcuts, compatibility patches.
+
+## Noted, needs the user
+
+- **Port the tooling changes to the modding center.** Commit `c8a34b4` changed `tools/build.sh`, `package.sh`,
+  `autotest.py`, `env.sh` in a convention-based, generic way (repo-local test mod `Tests/<MOD_NAME>Tests`, packageId
+  `<MOD_ID>tests`). Not ported: `/mnt/0B8533211952FCF2/rimworld-modding-center` is another repo; ask before modifying it.
+  The 800x500 default is this repo's alone (the colonist bar is hidden below that).
