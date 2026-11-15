@@ -341,4 +341,6 @@ evidence. Verify anything load-bearing against the decompiled source (`tools/van
   loads in place the new `Game` is current but `Find.World` is null, and the bar's recache throws a NullReferenceException.
   Guard with `!LongEventHandler.ShouldWaitForEvent && Current.Game?.World != null`. A guard-less read once switched the seam off
   for the rest of the session (it only showed after a scenario that reloads: run those before the real-input ones). (CC)
-
+- **Opening the world view starts a vanilla long event** of about a second (`LongEventHandler.ShouldWaitForEvent` is true for ~7 frames): neither the scenario driver (`AutoTest.MapReady`) nor the mod (`BarAdapter.GameReady`) acts during it. A real-time bound on "the bar followed" must exclude that time (`AutoTest.NotReadySeconds`) or it fails on the vanilla pause, not on the refresh. (CC)
+- A paused game still refreshes the mod's view: the adapter runs on real time (`Time.realtimeSinceStartup`) from `Bootstrap.LateUpdate`, so a scenario can change a pawn's draft, wounds, job tag, mood or skill while paused and wait for the bar. Vanilla marks the bar dirty on spawn, despawn and death but **not** on a draft, an injury, a job tag, a mood or a skill: those are only seen by the 0.25 s look. (CC)
+- Scenario step lists are built before the scenario starts: a local that a step reads (`c.C.ThingID`) is null/stale at build time. Read staged objects inside a step. After a save/load the fixture pawn *objects* are new: keep `ThingID`s and look them up with `Scenario.ById`. (CC)

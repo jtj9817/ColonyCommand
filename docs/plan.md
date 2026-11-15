@@ -181,7 +181,7 @@ skill levels, a mood offset (thought/need level). No rooms, power, items or anim
 | `Bar integrity` (P2, passed) | DrawLocs/Entries out of sync after a dirty (IndexOutOfRange), hit-test returns a hidden pawn, drag reorder writes `displayOrder` |
 | `View reset on load` (P2, passed) | the static `ViewState` survives a load: a hidden roster in a fresh game behind a blank search field (covers the "reload resets state" half of `No save data`) |
 | `Search field` / `Search Enter` / `Enter across maps` / `Chip clicks` / `Empty state` / `Controls placement` (P3, passed) | the controls: see `TODO.md` Phase 3 and `test-runs.md` 03:22 |
-| `Live refresh` | draft/injure/kill a fixture colonist → counts and view update without reopening |
+| `Live refresh` / `Live refresh across views` (P5, passed) | counts or view stale after a game change (draft/injure/idle/mood/skill/join/leave/death), not throttled, stale across maps, the world view, the main menu or a load; a pawn, map or old game left in a static of the mod |
 | `No save data` | save after use contains no `ColonyCommand` string; reload resets state |
 | `Core-only load` | release package loads with Core only, no missing-dependency errors (pkg-run / user check) |
 

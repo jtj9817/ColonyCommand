@@ -219,9 +219,24 @@ Defaults taken in Phase 4 (record; change only if the user says so):
 Groundwork already in `BarAdapter` (Phase 3): it re-evaluates every 0.25 s real time (counts in identity mode, a rebuild
 of the view otherwise) and never touches the bar while a game loads (`GameReady`). What is missing is the proof.
 
-- [ ] Throttled re-evaluation (~0.25 s real time) for drafted/injured/idle/mood/skill changes
-- [ ] Roster mutation (join, death, leave map), map switch, world view, main menu → no stale pawns
-- [ ] Scenario `Live refresh`
+Proof: `docs/test-runs.md` row 2026-11-15 05:14 (clean build `0121f50`, 3/3 PASS) and the mutation checks at 05:14-05:15.
+
+- [x] Throttled re-evaluation (~0.25 s real time) for drafted/injured/idle/mood/skill changes — `Live refresh` (11
+      re-evaluations in 3 s over ~70 frames with a view and with none; 19 live changes followed in <= 0.36 s with the game
+      paused and no control touched; the empty view and the way out of it)
+- [x] Roster mutation (join, death, leave map), map switch, world view, main menu → no stale pawns — `Live refresh` (join,
+      leave, death) and `Live refresh across views` (second map, world view, save → main menu → load; the scan of the mod's
+      statics held nothing on the menu and after the load; refresh alive in the reloaded game)
+- [x] Scenario `Live refresh` (+ `Live refresh across views`); mutation-checked: never refreshing, refreshing every frame and
+      keeping pawns in the scratch list were each caught
+
+Defaults taken in Phase 5 (record; change only if the user says so):
+
+- **The refresh bound** the scenarios hold the bar to is one 0.25 s period + twice the longest frame + 0.1 s, **excluding**
+  time in a vanilla long event (the world view's first opening runs one for ~1 s; the mod does not touch the bar then, as for
+  a load). Nothing in the shipped mod changed in Phase 5.
+- A chip count or view change that comes only from a draft, an injury, a job tag, a mood or a skill is seen only by that look
+  (vanilla marks the bar dirty on spawn/despawn/death, not on those).
 
 ## Phase 6 — Acceptance and release (spec §6)
 
