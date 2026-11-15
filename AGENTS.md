@@ -131,3 +131,6 @@ may use.
 
 `tools/` and the center docs are snapshots of `/mnt/0B8533211952FCF2/rimworld-modding-center` at `0542d72`.
 Other repos on this mount are the user's: read freely, never modify them from here.
+`tools/` here **intentionally differs** from that snapshot since `c8a34b4` (repo-local test mod built by `build.sh` and
+linked by `autotest.py`, `MOD_EXTRA_MODS` / `MOD_SCREEN` defaults): the user decided not to port those changes to the
+center (`TODO.md` Q5). Don't re-sync or "fix" the drift, and don't raise the port again.

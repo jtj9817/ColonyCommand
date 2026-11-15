@@ -13,6 +13,10 @@ A box is ticked only when proven (build, scenario run named in `docs/test-runs.m
 - [x] **Q3 Injured** — `health.hediffSet.HasNaturallyHealingInjury()` (any non-permanent injury).
 - [x] **Q4 Idle** — exactly the bar's idle icon condition (`ColonistBarColonistDrawer`): `mindState.IsIdle`,
       `GenDate.DaysPassed >= 1`, not drafted, not fleeing/attacking, not in a mental state.
+- [x] **Q5 Tooling port** — **do not port** the tooling changes of commit `c8a34b4` (`build.sh`, `package.sh`,
+      `autotest.py`, `env.sh`: repo-local test mod `Tests/<MOD_NAME>Tests`, `MOD_EXTRA_MODS` default, 800x500 window)
+      to `/mnt/0B8533211952FCF2/rimworld-modding-center`. They stay local to this repo, which therefore intentionally
+      differs from the center snapshot at `0542d72`. Do not raise it again or modify the center from here. (user, 2026-11-14)
 
 Defaults taken unless told otherwise: sorting is per group (map/caravan); next/prev-colonist hotkeys and
 drag-box selection follow the filtered view (they read the same list); drag-reorder disabled while a
@@ -34,7 +38,7 @@ filter/sort is active; skill presets Any/0/5/10/15; packageId `josh9817.colonyco
       `MOD_EXTRA_MODS`; check how `autotest.py`/`build.sh` must build it (tooling change → port rule)
       (proven by run `Harness wiring`, `docs/test-runs.md` 2026-11-15 00:58. `build.sh` now also builds
       `Tests/<MOD_NAME>Tests`, `package.sh` skips it, `autotest.py` links repo-local test mods into `Mods/`,
-      `MOD_EXTRA_MODS` defaults to `<MOD_ID>tests`, `MOD_SCREEN` to 800x500 — see "Noted" for the port)
+      `MOD_EXTRA_MODS` defaults to `<MOD_ID>tests`, `MOD_SCREEN` to 800x500; local to this repo, see Q5)
 - [x] `docs/test-runs.md`; `tools/autotest.py baseline` (6 vanilla-noise signatures, no `[ColonyCommand]` in the log)
 
 ## Phase 1 — Prove the zero-dependency seam (spec §6.1 step 1) — go/no-go gate
@@ -106,10 +110,3 @@ Hand-off for Phases 2–4 (verified engine facts, spec map, plan of attack, open
 ## Noted, out of scope (spec §6.2)
 
 Passion filter, work groups, pinned colonists, overview panel, custom shortcuts, compatibility patches.
-
-## Noted, needs the user
-
-- **Port the tooling changes to the modding center.** Commit `c8a34b4` changed `tools/build.sh`, `package.sh`,
-  `autotest.py`, `env.sh` in a convention-based, generic way (repo-local test mod `Tests/<MOD_NAME>Tests`, packageId
-  `<MOD_ID>tests`). Not ported: `/mnt/0B8533211952FCF2/rimworld-modding-center` is another repo; ask before modifying it.
-  The 800x500 default is this repo's alone (the colonist bar is hidden below that).
