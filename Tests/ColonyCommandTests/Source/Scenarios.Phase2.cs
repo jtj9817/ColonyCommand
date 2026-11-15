@@ -34,6 +34,8 @@ namespace ColonyCommandTests
             public SkillDef Skill;
             public int OriginalTicks = -1;
             public Roster R;
+            /// <summary>E's name while pawns are generated (see StageCast); restored when the scenario ends.</summary>
+            public Name TripleNameOfE;
             public readonly Dictionary<Pawn, string> Names = new Dictionary<Pawn, string>();
             public Dictionary<Pawn, bool> IdleIcon;
 
@@ -69,6 +71,8 @@ namespace ColonyCommandTests
                     BarProbe.Stop();
                     IdleProbe.Stop();
                     Find.Selector.ClearSelection();
+                    if (c.E != null && c.TripleNameOfE != null)
+                        c.E.Name = c.TripleNameOfE;   // it may outlive the scenario in the world pawns: keep it a triple for vanilla
                     if (c.OriginalTicks >= 0)
                         Find.TickManager.DebugSetTicksGame(c.OriginalTicks);
                 })
@@ -106,11 +110,15 @@ namespace ColonyCommandTests
             c.B = Fixtures.SpawnNamed(s, new NameTriple("Xandrel", "Zan", "Fxquaid"));
             c.C = Fixtures.SpawnNamed(s, new NameTriple("Brisk", "Brisk", "Fxoakley"));
             c.D = Fixtures.SpawnNamed(s, new NameTriple("Quinlan", "Lan", "Fxdrummond"));
-            c.E = Fixtures.SpawnNamed(s, new NameSingle("BZfxsolo"));
+            // Vanilla pawn generation can pick any existing pawn as a parent and casts its name to NameTriple
+            // (PawnRelationWorker_Parent.ResolveMyName): a NameSingle pawn that exists while another pawn is generated, now or in a
+            // later scenario of the same run, throws an InvalidCastException. So E is a triple until all generation is done.
+            c.E = Fixtures.SpawnNamed(s, c.TripleNameOfE = new NameTriple("Solo", "BZfxsolo", "Fx"));
             c.F = Fixtures.SpawnNamed(s, new NameTriple("Wraithe", "Ghost", "Fxhaunt"));
             // F first: its death must not leave anything on the others (they are staged after it, the game stays paused).
             Fixtures.Injure(c.F);
             Fixtures.Draft(c.F);
+            c.E.Name = new NameSingle("BZfxsolo");   // nothing generates a pawn from here on
             c.F.Kill(null);
             if (c.F.Corpse == null)
                 throw new InvalidOperationException("F left no corpse");
