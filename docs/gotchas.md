@@ -301,3 +301,21 @@ evidence. Verify anything load-bearing against the decompiled source (`tools/van
 - Distinguish the test instance from the user's game by command line (`-savedatafolder=`), never by window
   title. Xvfb hygiene: high display numbers, record the pid, verify the process name before killing. An idle
   test instance still renders ~370% CPU — cap its frame rate or stop it. (QR)
+- A colonist's death (or any message) puts a vanilla **message on screen, and messages are `ImmediateWindow`s** (at
+  `Messages.MessagesTopLeftStandard`, x≈134, 197 px wide): `Mouse.IsOver` is false beneath any window, so a message over the
+  first portraits **swallows real clicks and drags** into the colonist bar. `Messages.Clear()` before injecting input.
+  A **low fixture mood** (below the break thresholds) makes vanilla re-post "Critical alert: Major break risk" every few
+  seconds, which is the same trap again: stage moods well above them. Diagnose with the window under the pointer
+  (`Find.WindowStack.GetWindowAt(UI.MousePositionOnUIInverted)`) and the drag widget's private statics
+  (`ReorderableWidget.draggingReorderable/dragBegun/clicked`). (CC)
+- **Never leave a `NameSingle` pawn alive while another pawn is generated**: vanilla relation generation picks any existing
+  pawn as a parent and casts its name to `NameTriple` (`PawnRelationWorker_Parent.ResolveMyName`), an `InvalidCastException`
+  at random, also from a leftover fixture of an earlier scenario in the same instance. Fixtures use a triple while
+  generating, a single only afterwards, and restore it at the end. (CC)
+- `SkillRecord.Level` is `GetLevel()`: 0 when totally disabled, plus `Aptitude` (genes with Biotech, traits with Anomaly: 0 in
+  a Core-only game). Pick a test skill that none of the fixtures has disabled (`TotallyDisabled`), or the assertion flakes on
+  a random backstory. `GetSkill(def)` logs an error for a def the pawn lacks: iterate `skills.skills`. (CC)
+- Drafting does not touch `lastJobTag`; the think tree does, a tick or two later (`DraftedOrder`). In a paused game stage the
+  tag directly and prove the real path once with `TickManager.DoSingleTick()`. `GenDate.DaysPassed` is `TicksGame / 60000`:
+  `TickManager.DebugSetTicksGame` moves the idle icon's day-1 gate both ways (restore the tick when the scenario ends). (CC)
+

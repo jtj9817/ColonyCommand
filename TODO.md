@@ -120,12 +120,34 @@ hand-off's suggestion differs, the Decisions entry wins.
 
 ## Phase 2 — Roster snapshot and predicates (spec §3, §4)
 
-- [ ] `ViewState` (memory only) and `Predicates` (name, drafted, injured, idle, skill, mood)
-- [ ] `RosterView`: filter pipeline, per-group stable sort (tie → vanilla index), chip counts
-- [ ] `BarAdapter` uses `RosterView`; identity view when nothing is active
-- [ ] Test fixtures: colonists only (names, drafted, injury, skills, mood offset)
-- [ ] Scenarios `Name search`, `Status chips`, `Combined filter`, `Sort and restore`, `Bar integrity`,
-      `View reset on load` (added with open point 6)
+Proof: `docs/test-runs.md` rows 2026-11-15 02:12–02:16 (clean build `080d033`: 11/11 PASS; mutation checks 02:12–02:13).
+
+- [x] `ViewState` (memory only, `SyncGame` reset on a new game, `Version` counter, `Criteria` snapshot) and `Predicates`
+      (name, drafted, injured, idle chain, skill, mood) — `Name search`, `Status chips` (idle oracle = the bar's own icon),
+      `Combined filter`, `View reset on load`
+- [x] `RosterView`: filter pipeline, per-group stable sort (tie → vanilla index, both directions, unavailable last), chip
+      counts — `Sort and restore`, `Status chips`
+- [x] `BarAdapter` uses `RosterView`; identity view when nothing is active — `Name search` (whitespace-only query and
+      back = the untouched vanilla bar), `Sort and restore`, `Bar integrity` (a real drag on the vanilla bar still reorders)
+- [x] Test fixtures: colonists only (names incl. a `NameSingle`, drafted, injury and scar, skill levels, mood, job tag,
+      a dead colonist) — `Fixtures.cs`, the `Cast` in `Scenarios.Phase2.cs`
+- [x] Scenarios `Name search`, `Status chips`, `Combined filter`, `Sort and restore`, `Bar integrity`,
+      `View reset on load` (each with a stated failure mode; mutation-checked: case-sensitive match, flipped tie order
+      and ordinal name sort were each caught)
+- [ ] Delete the probe (`BarAdapter.ProbeView`/`ProbeKeeps`, the debug action, the probe-based oracle) in one dedicated
+      commit after migrating the `Seam *` scenarios to the real view (decision "open point 2" above)
+
+Defaults taken in Phase 2 (record; change only if the user says so):
+
+- **Name match** covers the displayed name (`LabelShort`), `First`/`Nick`/`Last` or a single name, **and the full name**
+  (`ToStringFull`, so "first last" typed with a space matches). Trim, `OrdinalIgnoreCase` substring.
+- **Skill criterion** = a chosen skill **and** a minimum level; level `Any` (`ViewState.AnyLevel`) switches the criterion
+  off, so choosing a skill alone only feeds the skill sort and hides nobody. Level 0 still excludes pawns for whom the
+  skill is unavailable (`TotallyDisabled`, no skills, dead). The All chip drops status and the minimum level and keeps the
+  query and the chosen skill (`ViewState.ClearStatusAndSkill`).
+- **Skill sort without a skill** is the vanilla order (`Criteria.EffectiveSort`); clearing the skill resets a skill sort.
+- **Sort direction** is one flag: name Z-A, or high-to-low for mood and skill. Missing values are last in both directions;
+  ties always go back to the vanilla position, whichever the direction.
 
 ## Phase 3 — Search field and filter strip UI (spec §2)
 

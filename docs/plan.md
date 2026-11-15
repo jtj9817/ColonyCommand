@@ -78,19 +78,31 @@ agreed with the user), never patched with Harmony.
   right-hand 260 px beside the bar; chip strip directly under the bar's lowest row. Window rect shrinks to the
   controls only, so it never covers portraits (spec: never steal clicks from visible portraits).
 
-### 1.4 Predicates and values (spec §3.2, §4)
+### 1.4 Predicates and values (spec §3.2, §4) — implemented and proven in Phase 2
 
-| Criterion | Source | Open question |
+| Criterion | Source | Notes |
 | --- | --- | --- |
-| Drafted | `pawn.Drafted` | — |
-| Injured | `health.hediffSet.HasNaturallyHealingInjury()` — any non-permanent injury (Q3) | — |
-| Idle | exactly the bar's idle-icon branch in `ColonistBarColonistDrawer` (Q4): `mindState.IsIdle` (not downed, spawned, `lastJobTag == JobTag.Idle`) + `GenDate.DaysPassed >= 1`, and none of the higher-priority icon states (mental state, drafted/fleeing/attacking) | Re-read the drawer's full branch when implementing |
-| Skill ≥ N | `pawn.skills?.GetSkill(def)`; unavailable when `skills == null` or `TotallyDisabled` → excluded from filter, sorted last | — |
-| Mood | `pawn.needs?.mood?.CurLevelPercentage`; null (e.g. corpse, subhuman) → sorted last | — |
-| Name | `pawn.LabelShort`, `Name` as `NameTriple` (First/Nick/Last) or `NameSingle`; trimmed, `OrdinalIgnoreCase` substring | — |
+| Drafted | `!pawn.Dead && pawn.Drafted` | A corpse is never drafted |
+| Injured | `!pawn.Dead && health.hediffSet.HasNaturallyHealingInjury()` — any non-permanent `Hediff_Injury` (Q3) | A scar (permanent) and a non-injury hediff do not count; the dead are never injured (open point 1) |
+| Idle | exactly the bar's idle-icon branch, the last of the chain in `ColonistBarColonistDrawer.DrawIcons`: not dead → not in a mental state → not in a medical bed → not asleep (job, or resting in a caravan) → not fleeing → not attacking → `mindState.IsIdle && GenDate.DaysPassed >= 1` | **No "not drafted" term**: the bar has none; a drafted colonist leaves `lastJobTag == Idle` through the think tree (`DraftedOrder`). The oracle is the bar itself (`IdleProbe`, a test-mod hook on `DrawIcons`/`DrawIcon`): `Status chips` compares predicate and drawn icon for every colonist, with a day-0 control and a real draft |
+| Skill ≥ N | the pawn's `SkillRecord.Level` (read from `skills.skills`, never `GetSkill`, which logs an error for a def the pawn lacks); unavailable (-1) when `skills == null`, dead, or `TotallyDisabled` | Unavailable pawns fail any skill criterion (even 0) and sort last. Core-only: `Level` has no aptitude offset |
+| Mood | `pawn.needs?.mood?.CurLevelPercentage`; NaN (unavailable) when dead or no mood need | Sorted last in both directions |
+| Name | `LabelShortCap` is the displayed name (untruncated); match = `LabelShort`, `NameTriple` `First`/`Nick`/`Last` or `NameSingle.Name`, and `ToStringFull`; trimmed `OrdinalIgnoreCase` substring | Name sort compares `LabelShortCap` with `InvariantCultureIgnoreCase` |
 
-Dead colonists (corpse entries) have `pawn != null`; they match name search but fail Drafted/Idle/skill;
-mood is unavailable.
+Dead colonists (corpse entries) have `pawn != null`: they match name search only and sort last for mood and skill.
+Placeholders (`pawn == null`, a map without colonists) are kept only while no filter is active.
+
+### 1.4a The pipeline as built
+
+`ViewState` (static, memory only: query, status, skill, min level, sort, direction, `Version`) → `Criteria` (a plain struct
+snapshot) → `RosterView.Build(vanillaEntries, criteria, output, out RosterCounts)`: per group, name → status → skill →
+sort (`List.Sort` with the vanilla index as the last key, so the order is total and deterministic), groups renumbered from
+0, groups that lose every entry vanish. `BarAdapter.ApplyCore`: identity (`Criteria.IsIdentity`) leaves the bar untouched
+(switching off = `MarkColonistsDirty`); otherwise it rebuilds when the criteria `Version` changed (from a fresh vanilla
+cache) or when the list is no longer ours (`IsView`: a vanilla recache), stamps the shared no-op `reorderAction` /
+`extraDraggedItemOnGUI`, lays out with its own `ColonistBarDrawLocsFinder`, writes `cachedScale`. `ViewState.SyncGame()`
+runs first in every `Apply()` and resets the state when `Current.Game` is a different game. Chip counts
+(`BarAdapter.Counts`) are computed from the same vanilla snapshot at each build.
 
 ### 1.5 Phase 1 gate: the zero-dependency seam holds (2026-11-15)
 
@@ -156,12 +168,12 @@ skill levels, a mood offset (thought/need level). No rooms, power, items or anim
 | --- | --- |
 | `Harness wiring` (P0) | test mod loads before the main assembly exists; the shipped assembly gains a Harmony reference |
 | `Seam view` / `Seam dirty` / `Seam hit test` / `Seam reorder` / `Seam topology` / `Seam map switch` / `Seam no save data` / `Seam bootstrap` / `Seam fail closed` (P1, passed) | the seam's gate proofs, one failure mode each: see §1.5 |
-| `Name search` | wrong match on case/partial/first-last/whitespace; no-match empty state |
-| `Status chips` | wrong predicate or count for Drafted/Injured/Idle; >1 status active |
-| `Combined filter` | AND logic broken; All doesn't keep search |
-| `Sort and restore` | non-deterministic ties; vanilla order not restored; `displayOrder` mutated |
-| `Bar integrity` | DrawLocs/Entries out of sync after a dirty (IndexOutOfRange), hit-test returns a hidden pawn, drag reorder writes `displayOrder` |
-| `View reset on load` | the static `ViewState` survives a load: a hidden roster in a fresh game behind a blank search field (covers the "reload resets state" half of `No save data`) |
+| `Name search` (P2, passed) | wrong match on case/partial/first-nick-last-single/full name/whitespace; a dead colonist unfindable; no-match leaving a broken bar; names or selection changed |
+| `Status chips` (P2, passed) | wrong predicate or count for Drafted/Injured/Idle; Idle disagreeing with the bar's own icon; >1 status active |
+| `Combined filter` (P2, passed) | AND logic broken; skill minimum wrong; All doesn't keep search |
+| `Sort and restore` (P2, passed) | non-deterministic ties; unavailable values not last; vanilla order not restored; `displayOrder` mutated |
+| `Bar integrity` (P2, passed) | DrawLocs/Entries out of sync after a dirty (IndexOutOfRange), hit-test returns a hidden pawn, drag reorder writes `displayOrder` |
+| `View reset on load` (P2, passed) | the static `ViewState` survives a load: a hidden roster in a fresh game behind a blank search field (covers the "reload resets state" half of `No save data`) |
 | `Live refresh` | draft/injure/kill a fixture colonist → counts and view update without reopening |
 | `No save data` | save after use contains no `ColonyCommand` string; reload resets state |
 | `Core-only load` | release package loads with Core only, no missing-dependency errors (pkg-run / user check) |
