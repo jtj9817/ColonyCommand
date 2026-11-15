@@ -161,6 +161,7 @@ skill levels, a mood offset (thought/need level). No rooms, power, items or anim
 | `Combined filter` | AND logic broken; All doesn't keep search |
 | `Sort and restore` | non-deterministic ties; vanilla order not restored; `displayOrder` mutated |
 | `Bar integrity` | DrawLocs/Entries out of sync after a dirty (IndexOutOfRange), hit-test returns a hidden pawn, drag reorder writes `displayOrder` |
+| `View reset on load` | the static `ViewState` survives a load: a hidden roster in a fresh game behind a blank search field (covers the "reload resets state" half of `No save data`) |
 | `Live refresh` | draft/injure/kill a fixture colonist → counts and view update without reopening |
 | `No save data` | save after use contains no `ColonyCommand` string; reload resets state |
 | `Core-only load` | release package loads with Core only, no missing-dependency errors (pkg-run / user check) |
